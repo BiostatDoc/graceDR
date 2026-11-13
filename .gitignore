@@ -13,3 +13,5 @@ inst/doc
 *.tar.gz
 *.Rcheck/
 .claude/worktrees/
+stata/*.log
+stata/lint_output.txt

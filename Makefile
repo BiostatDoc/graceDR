@@ -13,7 +13,7 @@ endif
 endif
 endif
 
-.PHONY: format lint test check pre-pr
+.PHONY: format lint test check stata-pre-pr pre-pr
 
 format:
 	Rscript -e "styler::style_pkg()"
@@ -30,4 +30,7 @@ test:
 check:
 	Rscript -e "devtools::check(error_on = 'warning', args = '--no-manual')"
 
-pre-pr: format lint test
+stata-pre-pr:
+	$(MAKE) -C stata pre-pr
+
+pre-pr: format lint test stata-pre-pr
