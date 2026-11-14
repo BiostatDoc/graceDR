@@ -235,6 +235,37 @@ foreach reserved in id arm code seq {
         message("gracedr: balance variable name `reserved' is reserved") ///
         command(`"`base_call' categorical(`reserved': a b)"')
 }
+foreach reserved in phase rngstate time study graphs prob1 prob12 {
+    expect_failure, ///
+        rc(198) ///
+        message("gracedr: balance variable name `reserved' is reserved") ///
+        command(`"`base_call' continuous(`reserved')"')
+}
+local label_message "gracedr: arm labels and levels must not contain"
+local label_message "`label_message' double quotes, backticks or dollar signs"
+local dollar = char(36)
+expect_failure, ///
+    rc(198) ///
+    message("`label_message'") ///
+    command(`"_gracedr_design validate, n(60) arms(A B`dollar') categorical(sex: a b)"')
+expect_failure, ///
+    rc(198) ///
+    message("`label_message'") ///
+    command(`"`base_call' categorical(sex: a b`dollar')"')
+local long_label ""
+forvalues position = 1/244 {
+    local long_label "`long_label'x"
+}
+_gracedr_design validate, n(60) arms(A `long_label') categorical(sex: a b)
+local too_long "`long_label'x"
+expect_failure, ///
+    rc(198) ///
+    message("gracedr: arm labels and levels must be at most 244 bytes") ///
+    command(`"_gracedr_design validate, n(60) arms(A `too_long') categorical(sex: a b)"')
+expect_failure, ///
+    rc(198) ///
+    message("gracedr: arm labels and levels must be at most 244 bytes") ///
+    command(`"`base_call' categorical(sex: a `too_long')"')
 local minus = char(45)
 foreach bad_name in 2x a`minus'b {
     expect_failure, ///

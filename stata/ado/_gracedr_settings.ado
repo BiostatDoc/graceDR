@@ -11,8 +11,11 @@ program define _gracedr_settings
 end
 
 program define _gracedr_settings_load, rclass
-    syntax , STUDY(string) [FROM(string) TO(string) CHECKPOINT(string) VARS(string)]
-    foreach setting in n arms ratio runin forcedat nvars varnames vartypes {
+    syntax , STUDY(string) [FROM(string) TO(string) CHECKPOINT(string) VARS(string) ///
+        DESIGNONLY]
+    local settings n arms ratio runin forcedat nvars varnames vartypes
+    local settings `settings' weights pstar xi runinmethod sizebound
+    foreach setting of local settings {
         _gracedr_study setting, study(`"`macval(study)'"') name(`setting')
         mata: st_local("`setting'", st_global("r(value)"))
     }
@@ -23,16 +26,18 @@ program define _gracedr_settings_load, rclass
     }
     _gracedr_filters positions, varnames(`"`macval(varnames)'"') vars(`"`macval(vars)'"')
     local positions "`r(positions)'"
-    _gracedr_study read, study(`"`macval(study)'"') name(participants)
-    _gracedr_filters records, ///
-        n(`n') ///
-        ratio(`ratio') ///
-        runin(`runin') ///
-        forcedat(`"`forcedat'"') ///
-        from(`"`macval(from)'"') ///
-        to(`"`macval(to)'"') ///
-        checkpoint(`"`macval(checkpoint)'"')
-    foreach setting in n arms ratio runin forcedat {
+    if missing("`designonly'") {
+        _gracedr_study read, study(`"`macval(study)'"') name(participants)
+        _gracedr_filters records, ///
+            n(`n') ///
+            ratio(`ratio') ///
+            runin(`runin') ///
+            forcedat(`"`forcedat'"') ///
+            from(`"`macval(from)'"') ///
+            to(`"`macval(to)'"') ///
+            checkpoint(`"`macval(checkpoint)'"')
+    }
+    foreach setting in n arms ratio runin forcedat weights pstar xi runinmethod sizebound {
         return local `setting' `"`macval(`setting')'"'
     }
     local kept : word count `positions'

@@ -1,7 +1,7 @@
 program define _gracedr_rules
     version 19
     gettoken subcommand 0 : 0, parse(" ,")
-    local known srs blocks minimization msb
+    local known srs blocks minimization msb breaks
     local is_known : list subcommand in known
     if `is_known' == 0 | missing(`"`macval(subcommand)'"') {
         display as error `"gracedr: unknown rules subcommand `macval(subcommand)'"'

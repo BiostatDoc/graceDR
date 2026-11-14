@@ -25,7 +25,7 @@ folder that holds the study files. The subcommands are:
 {synopt:{helpb gracedr_override:override}}change one assignment, with a reason{p_end}
 {synopt:{helpb gracedr_audit:audit}}list the audit log{p_end}
 {synopt:{helpb gracedr_replay:replay}}redo a past draw{p_end}
-{synopt:{cmd:simulate}}simulate trials (not written yet){p_end}
+{synopt:{helpb gracedr_simulate:simulate}}simulate trials{p_end}
 {p2colreset}{...}
 
 {pstd}

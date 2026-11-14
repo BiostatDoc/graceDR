@@ -4,7 +4,7 @@ This folder holds the Stata 19 version of graceDR. The design is in
 `docs/superpowers/specs/2026-11-13-stata-addition-design.md`. Right now it holds the
 checks that run the certification scripts, the study folder helpers, and the commands
 `gracedr setup`, `gracedr codes`, `gracedr randomize`, `gracedr status`, `gracedr override`,
-`gracedr audit` and `gracedr replay`. Later cards add the rest.
+`gracedr audit`, `gracedr replay` and `gracedr simulate`. Later cards add the rest.
 
 ## Requirements
 
@@ -25,6 +25,10 @@ Run these from the repository root, or from this folder with `make <target>`:
 | `lint` | Runs `stata_linter` on every `.ado` and `.do` file, lines up to 99 characters |
 | `test` | Runs every `cert/certify_*.do` in batch mode and fails on any Stata error |
 | `pre-pr` | Runs the three above in order |
+
+Mata code lives in `ado/_gracedr_*.mata`. Mata functions inside an `.ado` file are private to
+that file, so each subject keeps its functions in a `.mata` file that its `load` subcommand runs
+with `findfile` and `do` the first time it is needed.
 
 Write each certification file as `cert/certify_<subject>.do`. It must start by finding the
 `stata/` folder through the environment variable that `run_stata.sh` sets:
@@ -58,6 +62,7 @@ each command is its own file. Subcommands that are not written yet say so.
 | `gracedr override` | `ado/gracedr_override.ado` | Changes one arm, with a reason |
 | `gracedr audit` | `ado/gracedr_audit.ado` | Lists the audit log |
 | `gracedr replay` | `ado/gracedr_replay.ado` | Redoes a past draw and compares it |
+| `gracedr simulate` | `ado/gracedr_simulate.ado` | Simulates trials under several methods |
 
 `data/` holds `example_codes.csv` and `.dta` (the same 200 codes as the R package) and
 `example_participants.dta` (40 made-up participants). `help/` holds the `.sthlp` files. To read

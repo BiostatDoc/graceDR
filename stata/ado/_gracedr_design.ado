@@ -173,7 +173,11 @@ program define _gracedr_design_check_name
         display as error `"gracedr: `macval(name)' is not a valid Stata variable name"'
         exit 198
     }
-    if inlist(`"`macval(name)'"', "id", "arm", "code", "seq") {
+    local reserved = inlist(`"`macval(name)'"', "id", "arm", "code", "seq")
+    local reserved = `reserved' | inlist(`"`macval(name)'"', "phase", "rngstate", "time")
+    local reserved = `reserved' | inlist(`"`macval(name)'"', "study", "graphs")
+    local reserved = `reserved' | regexm(`"`macval(name)'"', "^prob[0-9]+$")
+    if `reserved' == 1 {
         display as error `"gracedr: balance variable name `macval(name)' is reserved"'
         exit 198
     }
@@ -252,6 +256,25 @@ program define _gracedr_design_parse_variables, rclass
     }
 end
 
+program define _gracedr_design_check_labels
+    syntax , [ARMS(string asis)]
+    local pattern = "[" + char(96) + char(36) + "]"
+    foreach label of local arms {
+        local unsafe = regexm(`"`macval(label)'"', "`pattern'")
+        local unsafe = `unsafe' | strpos(`"`macval(label)'"', char(34)) == 1
+        if `unsafe' == 1 {
+            display as error "gracedr: arm labels and levels must not contain " ///
+                "double quotes, backticks or dollar signs"
+            exit 198
+        }
+        local long = inrange(strlen(`"`macval(label)'"'), 245, 1e15)
+        if `long' == 1 {
+            display as error "gracedr: arm labels and levels must be at most 244 bytes"
+            exit 198
+        }
+    }
+end
+
 program define _gracedr_design_validate, rclass
     syntax ,                    ///
         N(string)               ///
@@ -303,6 +326,10 @@ program define _gracedr_design_validate, rclass
     mata: st_local("vartypes", st_global("r(vartypes)"))
     forvalues position = 1/`variable_count' {
         mata: st_local("levels`position'", st_global("r(levels`position')"))
+    }
+    _gracedr_design_check_labels, arms(`macval(arms)')
+    forvalues position = 1/`variable_count' {
+        _gracedr_design_check_labels, arms(`macval(levels`position')')
     }
     if missing(`"`pstar'"') {
         local pstar 0.30
