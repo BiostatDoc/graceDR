@@ -163,3 +163,21 @@ program define finish_participants
     syntax , STUDY(string)
     _gracedr_study write, study(`"`study'"') name(participants)
 end
+
+program define write_codes_for
+    args file per_arm
+    tempname handle
+    file open `handle' using "`file'", write text replace
+    file write `handle' "code,arm" _n
+    forvalues position = 1/`per_arm' {
+        local number = 100 + `position'
+        file write `handle' "A`number',A" _n
+        file write `handle' "B`number',B" _n
+    }
+    file close `handle'
+end
+
+program define read_dataset
+    args study name
+    _gracedr_study read, study(`"`study'"') name(`name')
+end

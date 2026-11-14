@@ -1,14 +1,21 @@
 program define _gracedr_save
     version 19
     syntax , STUDY(string) STEP(string) [WRITTEN(string) ID(string) ARM(string) ///
-        CODE(string) STATE(string) FROM(string)]
+        CODE(string) STATE(string) FROM(string) ACTION(string) OLD(string) ///
+        OLDCODE(string) REASON(string)]
+    if missing("`action'") {
+        local action randomize
+    }
     if "`step'" == "audit" {
         capture _gracedr_study append_audit, ///
             study(`"`macval(study)'"') ///
-            action(randomize) ///
+            action(`action') ///
             id(`"`macval(id)'"') ///
+            old(`"`macval(old)'"') ///
             new(`"`macval(arm)'"') ///
-            newcode(`"`macval(code)'"')
+            oldcode(`"`macval(oldcode)'"') ///
+            newcode(`"`macval(code)'"') ///
+            reason(`"`macval(reason)'"')
     }
     else if "`step'" == "state" {
         capture _gracedr_rng commit, ///
@@ -30,9 +37,10 @@ program define _gracedr_save
         display as error "gracedr: no study files were changed"
     }
     else {
-        display as error "gracedr: files already written: `files'; state.dta was not advanced"
+        display as error "gracedr: files already written: `files'; " ///
+            "the random number state was not changed"
         display as error "gracedr: fix the cause and check participants, codes and audit " ///
-            "before the next participant"
+            "before continuing"
     }
     exit `failure'
 end

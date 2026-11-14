@@ -11,17 +11,42 @@ program define _gracedr_settings
 end
 
 program define _gracedr_settings_load, rclass
-    syntax , STUDY(string)
+    syntax , STUDY(string) [FROM(string) TO(string) CHECKPOINT(string) VARS(string)]
     foreach setting in n arms ratio runin forcedat nvars varnames vartypes {
         _gracedr_study setting, study(`"`macval(study)'"') name(`setting')
         mata: st_local("`setting'", st_global("r(value)"))
-        return local `setting' `"`macval(`setting')'"'
     }
     local variable_count = real(`"`macval(nvars)'"')
     forvalues position = 1/`variable_count' {
         _gracedr_study setting, study(`"`macval(study)'"') name(levels`position')
-        mata: st_local("levels", st_global("r(value)"))
-        return local levels`position' `"`macval(levels)'"'
+        mata: st_local("levels`position'", st_global("r(value)"))
     }
+    _gracedr_filters positions, varnames(`"`macval(varnames)'"') vars(`"`macval(vars)'"')
+    local positions "`r(positions)'"
     _gracedr_study read, study(`"`macval(study)'"') name(participants)
+    _gracedr_filters records, ///
+        n(`n') ///
+        ratio(`ratio') ///
+        runin(`runin') ///
+        forcedat(`"`forcedat'"') ///
+        from(`"`macval(from)'"') ///
+        to(`"`macval(to)'"') ///
+        checkpoint(`"`macval(checkpoint)'"')
+    foreach setting in n arms ratio runin forcedat {
+        return local `setting' `"`macval(`setting')'"'
+    }
+    local kept : word count `positions'
+    local names ""
+    local types ""
+    forvalues index = 1/`kept' {
+        local position : word `index' of `positions'
+        local name : word `position' of `varnames'
+        local type : word `position' of `vartypes'
+        local names "`names' `name'"
+        local types "`types' `type'"
+        return local levels`index' `"`macval(levels`position')'"'
+    }
+    return local nvars "`kept'"
+    return local varnames = strtrim("`names'")
+    return local vartypes = strtrim("`types'")
 end

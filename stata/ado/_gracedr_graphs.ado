@@ -38,17 +38,21 @@ program define _gracedr_graphs_reached, rclass
     local rows = _N
     forvalues row = 1/`rows' {
         local value = n[`row']
-        if inrange(`value', 1, `limit') {
-            local reached "`reached' `value'"
+        if inrange(`macval(value)', 1, `limit') {
+            local reached "`reached' `macval(value)'"
         }
     }
     return local reached = strtrim("`reached'")
 end
 
 program define _gracedr_graphs_imbalance, rclass
-    syntax , STUDY(string) [SAVING(string)]
+    syntax , STUDY(string) [SAVING(string) FROM(string) TO(string) CHECKPOINT(string)]
     preserve
-    _gracedr_settings load, study(`"`macval(study)'"')
+    _gracedr_settings load, ///
+        study(`"`macval(study)'"') ///
+        from(`"`macval(from)'"') ///
+        to(`"`macval(to)'"') ///
+        checkpoint(`"`macval(checkpoint)'"')
     mata: st_local("n", st_global("r(n)"))
     mata: st_local("arms", st_global("r(arms)"))
     mata: st_local("ratio", st_global("r(ratio)"))
@@ -80,7 +84,7 @@ program define _gracedr_graphs_imbalance, rclass
     quietly use `"`enrolled'"', clear
     local ratio_total = 0
     foreach value of local ratio {
-        local ratio_total = `ratio_total' + `value'
+        local ratio_total = `ratio_total' + `macval(value)'
     }
     local plots ""
     local legend_order ""
@@ -118,8 +122,14 @@ program define _gracedr_graphs_imbalance, rclass
 end
 
 program define _gracedr_graphs_smd, rclass
-    syntax , STUDY(string) [SAVING(string)]
-    quietly _gracedr_tables balance, study(`"`macval(study)'"')
+    syntax , STUDY(string) [SAVING(string) FROM(string) TO(string) CHECKPOINT(string) ///
+        VARS(string)]
+    quietly _gracedr_tables balance, ///
+        study(`"`macval(study)'"') ///
+        from(`"`macval(from)'"') ///
+        to(`"`macval(to)'"') ///
+        checkpoint(`"`macval(checkpoint)'"') ///
+        vars(`"`macval(vars)'"')
     tempname smd_values
     matrix `smd_values' = r(smd)
     local varnames "`r(varnames)'"
