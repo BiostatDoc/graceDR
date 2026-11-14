@@ -182,58 +182,14 @@ program define _gracedr_mmsb_probs, rclass
         local type : word `position' of `vartypes'
         local weight : word `position' of `macval(weights)'
         local weight_list "`weight_list' `weight'"
-        if "`type'" == "categorical" {
-            local level_count : word count `macval(levels`position')'
-            local table ""
-            forvalues level = 1/`level_count' {
-                local level_text : word `level' of `macval(levels`position')'
-                forvalues arm = 1/`arm_count' {
-                    local label : word `arm' of `macval(arms)'
-                    quietly count if `name' == `"`macval(level_text)'"' & ///
-                        arm == `"`macval(label)'"'
-                    local table "`table' `r(N)'"
-                }
-            }
-            local row_index = 0
-            if !missing(`"`macval(cleaned`position')'"') {
-                local row_index : list posof `"`macval(cleaned`position')'"' in levels`position'
-            }
-            _gracedr_votes categorical, ///
-                table(`table') ///
-                arms(`arm_count') ///
-                row(`row_index') ///
-                pstar(`macval(pstar)')
-        }
-        else {
-            local n_text ""
-            local sum_text ""
-            local square_text ""
-            tempvar square
-            quietly generate double `square' = `name' * `name'
-            forvalues arm = 1/`arm_count' {
-                local label : word `arm' of `macval(arms)'
-                quietly summarize `name' if arm == `"`macval(label)'"'
-                local piece_count = r(N)
-                local sum_piece = string(r(sum), "%21.17g")
-                if `piece_count' == 0 {
-                    local sum_piece = 0
-                }
-                quietly summarize `square' if arm == `"`macval(label)'"'
-                local square_piece = string(r(sum), "%21.17g")
-                if `piece_count' == 0 {
-                    local square_piece = 0
-                }
-                local n_text "`n_text' `piece_count'"
-                local sum_text "`sum_text' `sum_piece'"
-                local square_text "`square_text' `square_piece'"
-            }
-            _gracedr_votes continuous, ///
-                n(`n_text') ///
-                sum(`sum_text') ///
-                ss(`square_text') ///
-                x(`number`position'') ///
-                pstar(`macval(pstar)')
-        }
+        _gracedr_balance vote, ///
+            name(`name') ///
+            type(`type') ///
+            arms(`macval(arms)') ///
+            pstar(`macval(pstar)') ///
+            levels(`macval(levels`position')') ///
+            value(`"`macval(cleaned`position')'"') ///
+            number(`number`position'')
         local vote`position' = r(vote)
         local votes "`votes' `vote`position''"
     }
