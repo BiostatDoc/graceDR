@@ -63,29 +63,6 @@ program define gracedr_setup, rclass
     forvalues position = 1/`variable_count' {
         mata: st_local("val_levels`position'", st_global("r(levels`position')"))
     }
-    foreach name of local val_varnames {
-        local reserved = inlist("`macval(name)'", "phase", "rngstate", "time", "study", "graphs")
-        local reserved = `reserved' | regexm("`macval(name)'", "^prob[0-9]+$")
-        if `reserved' == 1 {
-            display as error `"gracedr: balance variable name `macval(name)' is reserved"'
-            exit 198
-        }
-    }
-    local pattern = "[" + char(96) + char(36) + "]"
-    local labels `"`macval(val_arms)'"'
-    forvalues position = 1/`variable_count' {
-        local labels `"`labels' `val_levels`position''"'
-    }
-    local unsafe = 0
-    foreach label of local labels {
-        local unsafe = `unsafe' | regexm(`"`macval(label)'"', "`pattern'")
-        local unsafe = `unsafe' | strpos(`"`macval(label)'"', char(34)) == 1
-    }
-    if `unsafe' == 1 {
-        display as error "gracedr: arm labels and levels must not contain " ///
-            "double quotes, backticks or dollar signs"
-        exit 198
-    }
     preserve
     if !missing(`"`macval(codes)'"') {
         _gracedr_codes using `"`macval(codes)'"', arms(`macval(val_arms)')

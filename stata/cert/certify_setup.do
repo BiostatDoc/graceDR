@@ -139,6 +139,14 @@ expect_failure, ///
     rc(198) ///
     message("gracedr: n() must be a whole number from 2 to 2000000000") ///
     command(`"gracedr setup, study("`scratch'/four") n(1) arms(A B) `balance'"')
+local long_label ""
+forvalues position = 1/245 {
+    local long_label "`long_label'x"
+}
+expect_failure, ///
+    rc(198) ///
+    message("gracedr: arm labels and levels must be at most 244 bytes") ///
+    command(`"gracedr setup, study("`scratch'/four") n(60) arms(A `long_label') `balance'"')
 _gracedr_study folder, study("`scratch'/four")
 assert r(found) == 0
 expect_failure, ///
@@ -202,10 +210,21 @@ expect_failure, ///
     rc(198) ///
     message("gracedr: unknown subcommand nonsense") ///
     command(`"gracedr nonsense, study("`one'")"')
+quietly mkdir "`scratch'/phantom_ado"
+quietly findfile gracedr.ado
+filefilter "`r(fn)'" "`scratch'/phantom_ado/gracedr.ado", ///
+    from("simulate codes") ///
+    to("phantom codes")
+adopath ++ "`scratch'/phantom_ado"
+program drop gracedr
 expect_failure, ///
     rc(199) ///
-    message("gracedr: simulate is not available yet") ///
-    command(`"gracedr simulate, study("`one'")"')
+    message("gracedr: phantom is not available yet") ///
+    command(`"gracedr phantom, study("`one'")"')
+adopath - "`scratch'/phantom_ado"
+program drop gracedr
+quietly erase "`scratch'/phantom_ado/gracedr.ado"
+quietly rmdir "`scratch'/phantom_ado"
 
 local four_call `"gracedr setup, study("`scratch'/four") n(60) arms(A B) `balance'"'
 foreach bad_seed in -1 2147483648 1.5 abc {

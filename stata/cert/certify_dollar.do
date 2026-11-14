@@ -51,12 +51,13 @@ _gracedr_values parse, ///
     options("sex(male)")
 assert r(id) == "a" + char(36) + "HOME"
 
-_gracedr_design validate, ///
-    n(60) ///
-    arms(A B) ///
-    categorical(kind: `macval(dollar_text)' plain)
-assert r(levels1) == char(34) + "a" + char(36) + "home" + char(34) + " " + ///
-    char(34) + "plain" + char(34)
+local label_message "gracedr: arm labels and levels must not contain"
+local label_message "`label_message' double quotes, backticks or dollar signs"
+local validate_call "_gracedr_design validate, n(60) arms(A B)"
+expect_failure, ///
+    rc(198) ///
+    message("`label_message'") ///
+    command(`"`validate_call' categorical(kind: `macval(dollar_text)' plain)"')
 
 tempname handle
 file open `handle' using "`scratch'/dollar.csv", write text replace
