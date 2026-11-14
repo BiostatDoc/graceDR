@@ -125,3 +125,41 @@ program define check_probs
     }
     close_to `total' 1 0.000000001
 end
+
+program define start_participants
+    syntax , STUDY(string) ARMS(string)
+    _gracedr_study empty, name(participants) study(`"`study'"')
+    local count : word count `arms'
+    quietly set obs `count'
+    forvalues position = 1/`count' {
+        local label : word `position' of `arms'
+        local label = subinstr("`label'", "_", " ", .)
+        quietly replace seq = `position' in `position'
+        quietly replace id = "P`position'" in `position'
+        quietly replace arm = `"`macval(label)'"' in `position'
+    }
+end
+
+program define set_column
+    syntax , NAME(string) VALUES(string)
+    local count : word count `values'
+    capture confirm string variable `name'
+    local is_text = _rc == 0
+    forvalues position = 1/`count' {
+        local value : word `position' of `values'
+        if "`value'" == "." {
+            local value ""
+        }
+        if `is_text' == 1 {
+            quietly replace `name' = "`value'" in `position'
+        }
+        else if !missing("`value'") {
+            quietly replace `name' = `value' in `position'
+        }
+    }
+end
+
+program define finish_participants
+    syntax , STUDY(string)
+    _gracedr_study write, study(`"`study'"') name(participants)
+end
