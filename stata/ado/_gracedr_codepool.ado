@@ -1,7 +1,7 @@
 program define _gracedr_codepool
     version 19
     gettoken subcommand 0 : 0, parse(" ,")
-    local known counts claim
+    local known counts claim void
     local is_known : list subcommand in known
     if `is_known' == 0 | missing(`"`macval(subcommand)'"') {
         display as error `"gracedr: unknown codepool subcommand `macval(subcommand)'"'
@@ -50,4 +50,22 @@ program define _gracedr_codepool_claim, rclass
     mata: st_sstore(`found', "id", st_local("id"))
     local code = code[`found']
     return local code `"`macval(code)'"'
+end
+
+program define _gracedr_codepool_void
+    syntax , CODE(string)
+    local rows = _N
+    local found = 0
+    forvalues row = 1/`rows' {
+        local match = code[`row'] == `"`macval(code)'"' & status[`row'] == "used"
+        if `match' == 1 {
+            local found = `row'
+        }
+    }
+    if `found' == 0 {
+        display as error `"gracedr: code `macval(code)' is not a used code, "' ///
+            "so it cannot be voided"
+        exit 198
+    }
+    quietly replace status = "voided" in `found'
 end

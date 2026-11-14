@@ -2,8 +2,9 @@
 
 This folder holds the Stata 19 version of graceDR. The design is in
 `docs/superpowers/specs/2026-11-13-stata-addition-design.md`. Right now it holds the
-checks that run the certification scripts, the study folder helpers, and the first two
-commands, `gracedr setup`, `gracedr codes` and `gracedr randomize`. Later cards add the rest.
+checks that run the certification scripts, the study folder helpers, and the commands
+`gracedr setup`, `gracedr codes`, `gracedr randomize`, `gracedr status`, `gracedr override`,
+`gracedr audit` and `gracedr replay`. Later cards add the rest.
 
 ## Requirements
 
@@ -53,6 +54,10 @@ each command is its own file. Subcommands that are not written yet say so.
 | `gracedr setup` | `ado/gracedr_setup.ado` | Checks the options and creates a study folder |
 | `gracedr codes` | `ado/gracedr_codes.ado` | Checks and loads a treatment codes file |
 | `gracedr randomize` | `ado/gracedr_randomize.ado` | Assigns the next participant |
+| `gracedr status` | `ado/gracedr_status.ado` | Group sizes, balance and graphs, with filters |
+| `gracedr override` | `ado/gracedr_override.ado` | Changes one arm, with a reason |
+| `gracedr audit` | `ado/gracedr_audit.ado` | Lists the audit log |
+| `gracedr replay` | `ado/gracedr_replay.ado` | Redoes a past draw and compares it |
 
 `data/` holds `example_codes.csv` and `.dta` (the same 200 codes as the R package) and
 `example_participants.dta` (40 made-up participants). `help/` holds the `.sthlp` files. To read

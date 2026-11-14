@@ -25,9 +25,14 @@ program define _gracedr_tables_checkpoints
 end
 
 program define _gracedr_tables_groupsize, rclass
-    syntax , STUDY(string)
+    syntax , STUDY(string) [FROM(string) TO(string) CHECKPOINT(string) VARS(string)]
     preserve
-    _gracedr_settings load, study(`"`macval(study)'"')
+    _gracedr_settings load, ///
+        study(`"`macval(study)'"') ///
+        from(`"`macval(from)'"') ///
+        to(`"`macval(to)'"') ///
+        checkpoint(`"`macval(checkpoint)'"') ///
+        vars(`"`macval(vars)'"')
     mata: st_local("n", st_global("r(n)"))
     mata: st_local("arms", st_global("r(arms)"))
     mata: st_local("ratio", st_global("r(ratio)"))
@@ -112,9 +117,15 @@ program define _gracedr_tables_cell
 end
 
 program define _gracedr_tables_balance, rclass
-    syntax , STUDY(string) [SAVING(string)]
+    syntax , STUDY(string) [SAVING(string) FROM(string) TO(string) CHECKPOINT(string) ///
+        VARS(string)]
     preserve
-    _gracedr_settings load, study(`"`macval(study)'"')
+    _gracedr_settings load, ///
+        study(`"`macval(study)'"') ///
+        from(`"`macval(from)'"') ///
+        to(`"`macval(to)'"') ///
+        checkpoint(`"`macval(checkpoint)'"') ///
+        vars(`"`macval(vars)'"')
     mata: st_local("arms", st_global("r(arms)"))
     mata: st_local("varnames", st_global("r(varnames)"))
     mata: st_local("vartypes", st_global("r(vartypes)"))

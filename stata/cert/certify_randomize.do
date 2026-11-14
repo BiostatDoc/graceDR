@@ -7,24 +7,6 @@ assert !missing("`stata_dir'")
 adopath ++ "`stata_dir'/ado"
 do "`stata_dir'/cert/helpers.do"
 
-program define write_codes_for
-    args file per_arm
-    tempname handle
-    file open `handle' using "`file'", write text replace
-    file write `handle' "code,arm" _n
-    forvalues position = 1/`per_arm' {
-        local number = 100 + `position'
-        file write `handle' "A`number',A" _n
-        file write `handle' "B`number',B" _n
-    }
-    file close `handle'
-end
-
-program define read_dataset
-    args study name
-    _gracedr_study read, study(`"`study'"') name(`name')
-end
-
 _gracedr_study folder, study("`c(tmpdir)'")
 local base "`r(folder)'"
 local scratch "`base'/gracedr cert randomize"
