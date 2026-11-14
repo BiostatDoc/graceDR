@@ -204,8 +204,8 @@ expect_failure, ///
     command(`"gracedr nonsense, study("`one'")"')
 expect_failure, ///
     rc(199) ///
-    message("gracedr: randomize is not available yet") ///
-    command(`"gracedr randomize, study("`one'")"')
+    message("gracedr: status is not available yet") ///
+    command(`"gracedr status, study("`one'")"')
 
 local four_call `"gracedr setup, study("`scratch'/four") n(60) arms(A B) `balance'"'
 foreach bad_seed in -1 2147483648 1.5 abc {

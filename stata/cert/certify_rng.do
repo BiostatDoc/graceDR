@@ -322,6 +322,178 @@ expect_failure, ///
     command(`"_gracedr_rng draw, study("`fifth'") probs(1 1) arms(A B)"')
 remove_folder "`fifth'"
 
+local sixth "`base'/gracedr cert rng sixth"
+remove_folder "`sixth'"
+quietly mkdir "`sixth'"
+make_data 1
+_gracedr_study write, study("`sixth'") name(design)
+_gracedr_rng init, study("`sixth'") seed(20261114)
+preserve
+_gracedr_study read, study("`sixth'") name(state)
+local sixth_start = state[1]
+restore
+assert "`sixth_start'" == "`initial_state'"
+
+_gracedr_rng draw, study("`sixth'") probs(0.5 0.3 0.2) arms(A B C) nostore
+assert "`r(arm)'" == "A"
+assert "`r(state_before)'" == "`sixth_start'"
+local advanced_state "`r(new_state)'"
+assert !missing("`advanced_state'")
+local unchanged = "`advanced_state'" == "`sixth_start'"
+assert `unchanged' == 0
+preserve
+_gracedr_study read, study("`sixth'") name(state)
+assert state[1] == "`sixth_start'"
+restore
+assert c(rngstate) == "`user_state'"
+_gracedr_rng commit, study("`sixth'") state(`advanced_state')
+preserve
+_gracedr_study read, study("`sixth'") name(state)
+assert state[1] == "`advanced_state'"
+assert seed[1] == 20261114
+assert generator[1] == "mt64"
+assert format_version[1] == 1
+assert "`: type state'" == "strL"
+restore
+assert c(rngstate) == "`user_state'"
+
+local observed_arms "A"
+forvalues position = 2/`draws' {
+    _gracedr_rng draw, study("`sixth'") probs(0.5 0.3 0.2) arms(A B C) nostore
+    local observed_arms "`observed_arms'`r(arm)'"
+    local next_state "`r(new_state)'"
+    _gracedr_rng commit, study("`sixth'") state(`next_state')
+}
+assert "`observed_arms'" == "`reference_arms'"
+
+preserve
+_gracedr_study read, study("`sixth'") name(state)
+local committed_state = state[1]
+restore
+expect_failure, ///
+    rc(198) ///
+    message("gracedr: state is not a valid random number state") ///
+    command(`"_gracedr_rng commit, study("`sixth'") state(bogus!)"')
+expect_failure, ///
+    rc(601) ///
+    message("gracedr: state.dta is missing from `fourth'") ///
+    command(`"_gracedr_rng commit, study("`fourth'") state(abc123)"')
+expect_failure, ///
+    rc(601) ///
+    message("gracedr: no study found in `absent'") ///
+    command(`"_gracedr_rng commit, study("`absent'") state(abc123)"')
+preserve
+_gracedr_study read, study("`sixth'") name(state)
+assert state[1] == "`committed_state'"
+restore
+assert !fileexists("`sixth'/state.tmp")
+expect_failure, ///
+    rc(198) ///
+    message("gracedr: state.dta changed since the draw") ///
+    command(`"_gracedr_rng commit, study("`sixth'") state(abc123) from(abc999)"')
+preserve
+_gracedr_study read, study("`sixth'") name(state)
+assert state[1] == "`committed_state'"
+restore
+_gracedr_rng commit, study("`sixth'") state(`committed_state') from(`committed_state')
+
+local pick_state "`committed_state'"
+set rng mt64
+set rngstate `pick_state'
+local first_uniform = runiform()
+local second_uniform = runiform()
+set rng default
+set seed 424242
+local user_state = c(rngstate)
+local expected_arm = cond(inrange(`first_uniform', 0.5, 1), "B", "A")
+local expected_count = cond("`expected_arm'" == "A", 3, 7)
+local expected_index = floor(`second_uniform' * `expected_count') + 1
+_gracedr_rng draw, ///
+    study("`sixth'") ///
+    probs(0.5 0.5) ///
+    arms(A B) ///
+    codecounts(3 7) ///
+    nostore
+assert "`r(arm)'" == "`expected_arm'"
+assert r(code_index) == `expected_index'
+assert c(rngstate) == "`user_state'"
+local code_state "`r(new_state)'"
+_gracedr_rng replay, ///
+    state(`pick_state') ///
+    probs(0.5 0.5) ///
+    arms(A B) ///
+    codecounts(3 7)
+assert "`r(arm)'" == "`expected_arm'"
+assert r(code_index) == `expected_index'
+assert c(rngstate) == "`user_state'"
+_gracedr_rng replay, state(`pick_state') probs(0.5 0.5) arms(A B)
+assert missing(r(code_index))
+_gracedr_rng draw, study("`sixth'") probs(0.5 0.5) arms(A B) nostore
+local plain_state "`r(new_state)'"
+local same_state = "`plain_state'" == "`code_state'"
+assert `same_state' == 0
+
+_gracedr_rng draw, study("`sixth'") probs(0 1) arms(A B) codecounts(0 5) nostore
+assert "`r(arm)'" == "B"
+assert inrange(r(code_index), 1, 5)
+_gracedr_rng draw, study("`sixth'") probs(1 0) arms(A B) codecounts(4 0) nostore
+assert "`r(arm)'" == "A"
+assert inrange(r(code_index), 1, 4)
+_gracedr_rng draw, study("`sixth'") probs(1) arms(A) codecounts(1) nostore
+assert r(code_index) == 1
+
+forvalues position = 1/40 {
+    _gracedr_rng draw, study("`sixth'") probs(1 1 1) arms(A B C) codecounts(2 5 9) nostore
+    local limit = word("2 5 9", strpos("ABC", "`r(arm)'"))
+    assert inrange(r(code_index), 1, `limit')
+    local next_state "`r(new_state)'"
+    _gracedr_rng commit, study("`sixth'") state(`next_state')
+}
+
+preserve
+_gracedr_study read, study("`sixth'") name(state)
+local before_failure = state[1]
+restore
+expect_failure, ///
+    rc(198) ///
+    message("gracedr: no unused codes are left for arm B") ///
+    command(`"_gracedr_rng draw, study("`sixth'") probs(0 1) arms(A B) codecounts(4 0)"')
+expect_failure, ///
+    rc(198) ///
+    message("gracedr: no unused codes are left for arm B") ///
+    command(`"_gracedr_rng replay, state(`pick_state') probs(0 1) arms(A B) codecounts(4 0)"')
+preserve
+_gracedr_study read, study("`sixth'") name(state)
+assert state[1] == "`before_failure'"
+restore
+assert c(rngstate) == "`user_state'"
+foreach bad_counts in "1" "1 2 3" "-1 2" "1.5 2" "a 2" ". 2" {
+    local bad_call "_gracedr_rng draw, study(`sixth') probs(1 1) arms(A B)"
+    expect_failure, ///
+        rc(198) ///
+        message("gracedr: codecounts() must be one whole number per arm") ///
+        command(`"`bad_call' codecounts(`bad_counts')"')
+}
+preserve
+_gracedr_study read, study("`sixth'") name(state)
+assert state[1] == "`before_failure'"
+restore
+
+_gracedr_rng draw, ///
+    study("`sixth'") ///
+    probs(1 1) ///
+    arms(`""Arm one" "Arm two""') ///
+    codecounts(2 2)
+assert inlist("`r(arm)'", "Arm one", "Arm two")
+assert inrange(r(code_index), 1, 2)
+preserve
+_gracedr_study read, study("`sixth'") name(state)
+local stored_after = state[1]
+restore
+local moved = "`stored_after'" == "`before_failure'"
+assert `moved' == 0
+remove_folder "`sixth'"
+
 foreach folder in first second third fourth absent {
     remove_folder "``folder''"
 }
