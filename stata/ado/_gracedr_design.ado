@@ -128,9 +128,9 @@ program define _gracedr_design_checkpoints
     local forced_count : word count `forcedat'
     local rows = `rows' + `forced_count'
     quietly set obs `rows'
-    generate long n = .
-    generate str6 type = ""
-    generate byte priority = .
+    quietly generate long n = .
+    quietly generate str6 type = ""
+    quietly generate byte priority = .
     local row = 1
     quietly replace n = `n' in `macval(row)'
     quietly replace type = "final" in `macval(row)'

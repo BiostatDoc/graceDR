@@ -85,3 +85,43 @@ program define close_to
     assert !missing(`actual')
     assert inrange(`actual', `expected' - `tolerance', `expected' + `tolerance')
 end
+
+program define fill_participants
+    syntax , STUDY(string) ARMS(string) [SEXES(string) AGES(string)]
+    _gracedr_study empty, name(participants) study(`"`study'"')
+    local count : word count `arms'
+    quietly set obs `count'
+    forvalues position = 1/`count' {
+        quietly replace seq = `position' in `position'
+        quietly replace id = "P`position'" in `position'
+        local label : word `position' of `arms'
+        local label = subinstr("`label'", "_", " ", .)
+        quietly replace arm = `"`macval(label)'"' in `position'
+        if !missing("`sexes'") {
+            local level = word("`sexes'", `position')
+            if "`level'" == "." {
+                local level ""
+            }
+            quietly replace sex = "`level'" in `position'
+        }
+        if !missing("`ages'") {
+            local age = word("`ages'", `position')
+            quietly replace age = `age' in `position'
+        }
+    }
+    _gracedr_study write, study(`"`study'"') name(participants)
+end
+
+program define check_probs
+    args expected
+    local count : word count `expected'
+    assert wordcount("`r(probs)'") == `count'
+    local total = 0
+    forvalues position = 1/`count' {
+        local actual = real(word("`r(probs)'", `position'))
+        local wanted = real(word("`expected'", `position'))
+        close_to `actual' `wanted' 0.000000001
+        local total = `total' + `actual'
+    }
+    close_to `total' 1 0.000000001
+end
