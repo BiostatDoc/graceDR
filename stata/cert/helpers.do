@@ -2,7 +2,7 @@ program define expect_failure
     syntax , MESSAGE(string) COMMAND(string) [RC(integer -1)]
     tempfile capture_log
     quietly log using "`capture_log'", text replace name(expect)
-    capture noisily `command'
+    capture noisily `macval(command)'
     local actual = _rc
     quietly log close expect
     if `rc' == -1 {
@@ -78,4 +78,10 @@ program define write_text_file
         }
     }
     file close `handle'
+end
+
+program define close_to
+    args actual expected tolerance
+    assert !missing(`actual')
+    assert inrange(`actual', `expected' - `tolerance', `expected' + `tolerance')
 end
