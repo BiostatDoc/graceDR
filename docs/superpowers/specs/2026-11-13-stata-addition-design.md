@@ -203,6 +203,18 @@ before it, and compares the arm. The certification script checks that a fixed se
 the same draws on repeated runs and on a second machine. Results are required to match
 across machines for the same seed (section 8), not across R and Stata.
 
+**Draw and commit (decision of the user, 2026-11-14).** A draw takes one uniform number from the
+study's stored state and uses it to choose the arm from the allocation probabilities. When the
+study has treatment codes, the same draw takes a second uniform number from the same state and
+uses it to choose among the unused codes of that arm. One stored state therefore reproduces both
+the arm and the treatment code, and `replay` checks both. The draw has a `nostore` option. With it,
+the new state is returned and `state.dta` is not changed. A separate `commit` subcommand writes a
+given state to `state.dta`. Its option `from()` names the state that the draw started from, and
+`commit` refuses to write if `state.dta` no longer holds that state. `randomize` and `override`
+draw with `nostore`, write the participants, codes, and audit files, and commit the new state
+last. If an earlier write fails, the state is unchanged, so the draw can be repeated and gives the
+same arm and code. Neither the draw nor the commit changes the user's own random number state.
+
 ### Simulation
 
 ```
