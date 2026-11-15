@@ -17,6 +17,7 @@ program define gracedr_setup, rclass
         CONTINUOUS(string asis)     ///
         CODES(string)               ///
         SEED(string)                ///
+        ENCRYPT                     ///
         ]
     _gracedr_study folder, study(`"`macval(study)'"')
     mata: st_local("folder", st_global("r(folder)"))
@@ -88,7 +89,7 @@ program define gracedr_setup, rclass
             mata: st_sstore(`macval(row)', "value", st_local("val_`item'"))
             quietly replace order = `macval(row)' in `macval(row)'
         }
-        _gracedr_study write, study(`"`macval(study)'"') name(design)
+        _gracedr_study write, study(`"`macval(study)'"') name(design) `encrypt'
         if !missing(`"`macval(codes)'"') {
             quietly _gracedr_codes using `"`macval(codes)'"', arms(`macval(val_arms)')
         }
@@ -115,9 +116,12 @@ program define gracedr_setup, rclass
         return local study `"`macval(folder)'"'
     }
     else {
+        _gracedr_study extension, study(`"`macval(study)'"')
+        local extension "`r(extension)'"
         display as error "gracedr: setup stopped before it finished."
-        display as error `"Remove design.dta, codes.dta, participants.dta, audit.dta and "' ///
-            `"state.dta from `macval(study)' and run setup again."'
+        display as error `"Remove design.`extension', codes.`extension', "' ///
+            `"participants.`extension', audit.`extension' and state.`extension' "' ///
+            `"from `macval(study)' and run setup again."'
         exit `failure'
     }
 end

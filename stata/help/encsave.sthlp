@@ -8,7 +8,7 @@
 {title:Syntax}
 
 {p 8 17 2}
-{cmd:encsave} {cmd:using} {it:filename} [{cmd:,} {opt replace}]
+{cmd:encsave} {cmd:using} {it:filename} [{cmd:,} {opt replace} {opt session}]
 
 
 {title:Description}
@@ -35,6 +35,11 @@ Stata uses and {cmd:set python_exec} to change it.
 {phang}
 {opt replace} permits {cmd:encsave} to overwrite an existing zip file. The old file stays
 unchanged if writing the new one fails.
+
+{phang}
+{opt session} remembers a password typed in the pop-up until Stata closes, so that later calls
+with {opt session} do not ask again. The password stays in Python's memory only. The
+{cmd:gracedr} commands use it for encrypted studies. Without it, every call asks.
 
 
 {title:Examples}

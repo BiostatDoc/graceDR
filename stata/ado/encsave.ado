@@ -1,6 +1,6 @@
 program define encsave
     version 19
-    syntax using/ [, REPLACE]
+    syntax using/ [, REPLACE SESSION]
     local has_extension = lower(substr(`"`macval(using)'"', -4, 4)) == ".zip"
     if `has_extension' == 0 {
         local using `"`macval(using)'.zip"'
@@ -15,6 +15,7 @@ program define encsave
     _gracedr_zip_folder
     local module_folder `r(folder)'
     local archive `"`macval(using)'"'
+    local session = cond("`session'" == "", "0", "1")
     tempfile plain
     preserve
     quietly save `"`plain'"'

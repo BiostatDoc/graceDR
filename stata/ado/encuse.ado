@@ -1,6 +1,6 @@
 program define encuse
     version 19
-    syntax using/ [, CLEAR]
+    syntax using/ [, CLEAR SESSION]
     local has_extension = lower(substr(`"`macval(using)'"', -4, 4)) == ".zip"
     if `has_extension' == 0 {
         local using `"`macval(using)'.zip"'
@@ -11,6 +11,7 @@ program define encuse
     _gracedr_zip_folder
     local module_folder `r(folder)'
     local archive `"`macval(using)'"'
+    local session = cond("`session'" == "", "0", "1")
     tempfile plain
     python: import sys; sys.path[:0] = [r"`module_folder'"]
     capture noisily python: import gracedr_zip; gracedr_zip.run_from_stata("encuse", "load")
