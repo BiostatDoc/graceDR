@@ -1,0 +1,915 @@
+\documentclass[bib]{statapress}
+\usepackage[crop,newcenter,frame]{pagedims}
+\usepackage{sj}
+\usepackage{epsfig}
+\usepackage{graphicx}
+\usepackage{stata}
+\usepackage{amsmath}
+\usepackage{threeparttable}
+\usepackage{tabularx}
+\sjsetissue{$vv$}{$ii$}{$mm$}{$yyyy$}
+\graphicspath{{replication/figures/}}
+\emergencystretch=3em
+
+\newcommand{\gracedr}{\texttt{gracedr}}
+
+\begin{document}
+
+\inserttype[st0001]{article}
+\author{Ma and Hardin}{%
+  Grace Huiyi Ma\\Dutch Fork High School STEM Magnet Program\\Irmo, SC\\
+  \and
+  James W. Hardin\\Department of Epidemiology and Biostatistics\\
+  University of South Carolina\\Columbia, SC\\jhardin@sc.edu
+}
+\title[gracedr: Randomization with exact group sizes]{%
+  gracedr: Modified minimal sufficient balance randomization with
+  exact group sizes, an audit log, and encrypted datasets in Stata}
+\maketitle
+
+\begin{abstract}
+Minimal sufficient balance randomization balances baseline covariates while
+keeping assignments unpredictable, but it does not guarantee prescribed group
+sizes, and the usual remedy of capping the arm sizes forces long runs of
+predictable assignments. We describe \gracedr, a Stata package that implements
+a modified procedure. It adds an exact-allocation run-in, forced allocation at
+enrollment totals chosen in advance and at the final sample size, any number of
+arms with unequal allocation ratios, and a base probability computed from the
+places left before the next forced total. The package stores each study in a
+folder, records every assignment and override in an append-only audit log,
+replays any past assignment, and simulates operating characteristics. Because
+Stata has no built-in encrypted file format, we also describe \texttt{encsave}
+and \texttt{encuse}, which save and load datasets as password-protected
+encrypted zip files through Stata's Python integration, and encrypted studies built on them. We
+simulated 1,000 trials in each of four settings (200 or 500 participants, with
+and without drift in the enrolled population) and compared the procedure with
+simple randomization, permuted blocks, minimization, and unmodified minimal
+sufficient balance. The modified procedure met the group sizes at the end of the
+run-in and at the end of enrollment in every trial, whereas unmodified minimal
+sufficient balance missed the final sizes by a mean of 5.8 to 10.2 participants.
+The mean largest standardized difference at the end of enrollment of the
+modified procedure (0.093 to 0.162) was lower than for simple randomization and
+permuted blocks and higher than for unmodified minimal sufficient balance and
+for minimization, and its expected correct-guess probability was 58.5\% to
+59.3\%, compared with 70.8\% to 70.9\% for permuted blocks of size four and
+61.7\% to 62.1\% for minimization.
+\keywords{\inserttag, gracedr, randomize, encsave, encuse, covariate-adaptive
+randomization, minimal sufficient balance, dynamic randomization, allocation
+randomness, encryption}
+\end{abstract}
+
+\section{Introduction}
+
+In many clinical trials participants become eligible one at a time and must be
+assigned to treatment immediately. The randomization procedure must then
+balance two goals that pull against each other. Treatment assignments should be
+unpredictable, so that investigators cannot steer participants toward an arm,
+and the arms should be comparable in size and in prognostically important
+baseline covariates, so that chance imbalance does not cloud the treatment
+comparison \citep{rosenberger2016,berger2005,altman1990}. Restricted designs
+such as permuted blocks and biased coins control group sizes
+\citep{efron1971,wei1978,soares1983,berger2003}, and covariate-adaptive designs
+such as minimization control covariate margins
+\citep{taves1974,pocock1975,scott2002}, but each restriction makes a larger
+share of assignments predictable \citep{blackwell1957,zhao2012compare}.
+
+Minimal sufficient balance (MSB) randomization \citep{zhao2015msb} resolves
+much of this tension by using a biased coin only when a controlled covariate is
+imbalanced beyond a prespecified limit \emph{and} the current participant's
+assignment can reduce that imbalance. Covariates are used on their original
+scale, so continuous covariates need not be categorized. Later work examined
+the statistical properties, bias, and power of MSB
+\citep{lauzon2020msb,lauzon2022msb} and proposed a common-scale variant
+\citep{johns2022csmsb}.
+
+MSB as published, however, does not guarantee the prescribed group sizes. Most
+protocols prescribe the number of participants in each arm, and the charters of
+data and safety monitoring boards may expect the arms to be close to their
+prescribed sizes at each review. The simplest remedy, capping each arm at its
+prescribed size, creates the problem MSB was designed to avoid: once one arm
+fills, every remaining participant is forced into the other arm, and those
+forced assignments are perfectly predictable. When the enrolled population
+changes over time, the forced tail also turns that time trend into covariate
+imbalance. \citet{zhao2015msb} noted that a balanced allocation could be
+enforced for an initial portion of the trial with the random allocation rule,
+but they did not formalize the idea.
+
+This article describes the \gracedr\ package for Stata 19, which implements a
+modified MSB procedure built around these operational requirements. Relative
+to the original algorithm it adds an exact-allocation run-in whose size follows
+a stated rule, forced allocation at enrollment totals chosen in advance and at
+the final sample size, support for any number of arms and for unequal
+allocation ratios, and a base probability computed from the places left before
+the next forced total. A group-size vote and a big stick bound
+\citep{soares1983} complete the procedure. Around the algorithm, the package
+keeps the study in a folder with an append-only audit log, replays any past
+assignment, and simulates operating characteristics against four comparators.
+
+Live randomization needs a record that the investigators cannot change
+unnoticed and that unauthorized people cannot read, because the allocation
+sequence must stay concealed. Stata has no encrypted file format. We therefore
+also built \texttt{encsave} and \texttt{encuse}, two commands that are
+independent of the randomization commands, and an option that stores a whole
+study as encrypted files. Section~\ref{sec:encrypt} describes their
+development.
+
+Section~\ref{sec:algorithm} states the algorithm, section~\ref{sec:commands}
+describes the commands with a worked example, section~\ref{sec:encrypt}
+describes the encrypted datasets, section~\ref{sec:sim} reports a simulation
+study, and section~\ref{sec:conclusions} discusses what the simulations do and
+do not show.
+
+\section{The algorithm}
+\label{sec:algorithm}
+
+\subsection{Notation}
+
+Consider a trial with $k \ge 2$ arms and target sample size $N$. The allocation
+ratio is a vector of positive numbers, and the target proportions are
+$r_a = \text{ratio}_a / \sum_b \text{ratio}_b$ for arms $a = 1, \ldots, k$.
+Before participant $i$ is randomized, $n_a(i)$ is the number of participants
+already assigned to arm $a$, so that $\sum_a n_a(i) = i - 1$, and
+\[
+D_a(i) = n_a(i) - r_a (i - 1)
+\]
+is the deviation of arm $a$ from its target count. Every allocation rule in the
+package returns a probability vector $\phi(i) = (\phi_1(i), \ldots,
+\phi_k(i))$, together with a label for the step of the algorithm that produced
+it. The participant is assigned by one draw from $\phi(i)$.
+
+\subsection{Minimal sufficient balance votes}
+\label{sec:votes}
+
+Each balance variable $v$ has a weight $w_v > 0$. The weights are rescaled to
+sum to one, and equal weights are the default. Each variable casts a vote for
+one arm or no vote. A vote is cast only when the imbalance between the arms
+among the participants already randomized is large enough, as measured by a
+$p$-value below the limit $p^\ast$ (default 0.30), and when the current
+participant's value allows the assignment to reduce that imbalance
+\citep{zhao2015msb}. A participant whose value of a variable is missing casts
+no vote for that variable.
+
+\emph{Categorical variables.} Let $T$ be the table of previous participants by
+level and arm. Levels with no previous participants are dropped. No vote is
+cast if fewer than two levels remain, if any arm has no participants in the
+table, or if the current participant's level is not in the table. Otherwise the
+Pearson statistic $\chi^2 = \sum_{j,a} (T_{ja} - E_{ja})^2 / E_{ja}$, with
+$E_{ja}$ the product of the row and column totals divided by the table total,
+is compared with a $\chi^2$ distribution on $(L - 1)(k - 1)$ degrees of
+freedom, where $L$ is the number of levels in the table. If the $p$-value is
+below $p^\ast$, the vote goes to the arm with the lowest share
+$T_{ja} / \sum_j T_{ja}$ in the current participant's level $j$. A tie for the
+lowest share gives no vote.
+
+\emph{Continuous variables.} No vote is cast unless every arm has at least two
+previous participants and a positive variance. With two arms, the statistic is
+Welch's two-sample $t$ statistic with the Satterthwaite degrees of freedom
+\citep{welch1947,satterthwaite1946}. With $k > 2$ arms it is Welch's one-way
+analysis of variance from the arm sizes $n_a$, means $m_a$, and variances
+$s_a^2$ \citep{welch1951}. If the $p$-value is below $p^\ast$, a participant
+whose value is above every arm mean votes for the arm with the smallest mean,
+and a participant whose value is below every arm mean votes for the arm with the
+largest mean. A participant whose value lies between the arm means casts no
+vote, because either assignment would change the imbalance very little. A tie
+for the smallest or largest mean gives no vote.
+
+\emph{Group size.} After the run-in, group size is one more voter. If the arm
+with the most negative deviation has $D_a(i) \le -1$, and no other arm has the
+same deviation, it receives a vote of weight 1.
+
+\emph{Tally.} The score of arm $a$ is the sum of the weights of the votes it
+received. The winner $\hat a$ is the arm with the single highest score. There is
+no winner if no votes were cast or if two arms tie for the highest score.
+
+\subsection{The biased coin}
+
+MSB assigns to the favored arm with probability $\xi$ (default 0.65). To apply
+the same coin to a base probability vector $b$ that need not be uniform, the
+package tilts the favored arm on the odds scale. With $\omega = \xi / (1 - \xi)$,
+\begin{equation}
+\phi_{\hat a} = \frac{\omega b_{\hat a}}{1 - b_{\hat a} + \omega b_{\hat a}},
+\qquad
+\phi_a = b_a \, \frac{1 - \phi_{\hat a}}{1 - b_{\hat a}} \quad (a \ne \hat a).
+\label{eq:tilt}
+\end{equation}
+The other arms keep their relative probabilities. With two arms and
+$b = (1/2, 1/2)$, the favored arm receives exactly $\xi$, which is the rule of
+\citet{zhao2015msb}. If there is no winner, or if $b_{\hat a}$ is 0 or 1, then
+$\phi = b$, so a forced assignment is never overridden by a vote.
+
+\subsection{Checkpoints and the base probability}
+
+A \emph{checkpoint} is an enrollment total at which the arm counts must equal
+their target counts. The checkpoints $c_1 < \cdots < c_J = N$ are the end of the
+run-in (when the run-in is not empty), any totals the user names in advance with
+the \texttt{forcedat()} option, and the final sample size $N$. The target count
+of arm $a$ at checkpoint $c$ is $t_a(c)$, the largest-remainder rounding of
+$c \, r_a$: each arm receives $\lfloor c r_a \rfloor$, and the remaining units
+go one at a time to the arms with the largest fractional parts, with ties going
+to the earlier arm. The targets add up to $c$.
+
+Before participant $i$, let $c$ be the smallest checkpoint with $c \ge i$, and
+let $R = c - (i - 1)$ be the number of places left before it. The base
+probability is
+\begin{equation}
+b_a(i) = \frac{\max\{t_a(c) - n_a(i), 0\}}{R},
+\label{eq:base}
+\end{equation}
+which is the random allocation rule toward checkpoint $c$. The base
+probabilities add up to one, and an arm whose target has been reached receives
+probability zero. When only one arm is short of its target, $b_a(i) = 1$ for
+that arm and the assignment is forced.
+
+\subsection{The run-in}
+
+The default run-in size is
+\begin{equation}
+N_1 = \min\{N, \; \lceil n_1 / s \rceil s\}, \qquad
+n_1 = \max\{10, \lceil 0.10 N \rceil\},
+\label{eq:runin}
+\end{equation}
+where $s = \sum_a \text{ratio}_a$ when every ratio is a whole number, and
+$N_1 = \min\{N, n_1\}$ otherwise. Setting \texttt{runin(0)} removes the run-in.
+For $i \le N_1$ the probability is $\phi(i) = \operatorname{tilt}(b(i), \hat a)$
+of equation~(\ref{eq:tilt}), where the winner $\hat a$ comes from the votes of
+the balance variables only. Because $b(i)$ becomes a unit vector once all but
+one arm have reached their run-in targets, the run-in ends with exactly the
+target counts in every realization, yet the covariates influence each earlier
+assignment. The option \texttt{runinmethod(rar)} removes the tilt and gives the
+plain random allocation rule that \citet{zhao2015msb} suggested.
+
+\subsection{After the run-in}
+
+For $i > N_1$ the procedure applies three steps in this order.
+\begin{enumerate}
+\item \emph{Quota.} If an arm is forced by equation~(\ref{eq:base}), assign to
+it.
+\item \emph{Big stick bound.} Let $B$ be the size bound (default 3). If any arm
+has $D_a(i) \le -B$, only those arms can be chosen, with probabilities
+proportional to $-D_a(i)$ \citep{soares1983}. Otherwise, arms with
+$D_a(i) \ge B$ receive probability zero and the remaining base probabilities are
+rescaled to add up to one.
+\item \emph{MSB coin.} If the bound changed nothing,
+$\phi(i) = \operatorname{tilt}(b(i), \hat a)$, where the winner now includes the
+group-size vote.
+\end{enumerate}
+The package labels each assignment with its step: \texttt{runin},
+\texttt{quota}, \texttt{bound}, \texttt{msb-biased} (a winner existed), or
+\texttt{msb-random} (no winner).
+
+\subsection{Fixed internal choices}
+
+Three choices are fixed constants rather than options. We did not study
+alternatives to them, so the simulations below describe the procedure with
+these constants.
+\begin{itemize}
+\item \emph{The group-size vote starts at a shortfall of 1.} A shortfall below
+1 cannot be corrected by one assignment, and under 1:1 allocation a deviation of
+$\pm 0.5$ occurs at every odd count, so a lower limit would make group size vote
+almost constantly.
+\item \emph{The group-size vote has weight 1.} Because the balance-variable
+weights add up to one, group size then outvotes any proper subset of the
+variables and ties only when every variable votes against it.
+\item \emph{The base probability comes from the places left before the next
+checkpoint.} This is what makes the checkpoints exact, and it moves every arm
+toward its target throughout enrollment instead of leaving the whole correction
+to the end.
+\end{itemize}
+
+\section{The commands}
+\label{sec:commands}
+
+\subsection{Overview}
+
+All randomization commands are subcommands of \gracedr, and all take
+\texttt{study(}\emph{folder}\texttt{)}, the folder that holds the study files.
+Table~\ref{tab:commands} lists them. The dispatcher \texttt{gracedr} runs
+\texttt{gracedr\_}\emph{subcommand}, so each command is a separate ado-file.
+
+\begin{table}[htbp]
+\centering
+\caption{Commands of the \gracedr\ package}
+\label{tab:commands}
+\begin{tabular}{ll}
+\hline
+Command & Purpose \\
+\hline
+\texttt{gracedr setup} & Create a study folder from a design \\
+\texttt{gracedr codes} & Check and load a file of treatment codes \\
+\texttt{gracedr randomize} & Randomize one participant and save the record \\
+\texttt{gracedr status} & Group sizes, balance tables, and graphs \\
+\texttt{gracedr override} & Change an assignment with a recorded reason \\
+\texttt{gracedr audit} & List the append-only audit log \\
+\texttt{gracedr replay} & Redraw a past assignment and compare it with the
+record \\
+\texttt{gracedr simulate} & Simulate trials under up to five allocation
+methods \\
+\texttt{encsave} & Save the data in memory to an encrypted zip file \\
+\texttt{encuse} & Load the data from an encrypted zip file \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Defining a study}
+
+\begin{stlog}
+\gracedr\ setup, study(\emph{folder}) n(\#) arms(\emph{string})
+    [categorical(\emph{string}) continuous(\emph{namelist}) weights(\emph{numlist})
+    ratio(\emph{numlist}) pstar(\#) xi(\#) runin(\#) runinmethod(tilted|rar)
+    forcedat(\emph{numlist}) sizebound(\#) codes(\emph{file}) seed(\#) encrypt]
+\end{stlog}
+
+\noindent Table~\ref{tab:options} lists the options. The balance variables are
+named in \texttt{categorical()}, with their levels, and \texttt{continuous()}.
+The command checks every option, creates the folder, and writes the design,
+the treatment codes, the empty participant table, the random number state, and
+the audit log. It refuses to run if the folder already holds a study.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Options of \texttt{gracedr setup}}
+\label{tab:options}
+\begin{tabular}{lll}
+\hline
+Option & Default & Meaning \\
+\hline
+\texttt{n()} & (required) & Total planned enrollment \\
+\texttt{arms()} & (required) & Arm labels, at least two \\
+\texttt{categorical()} & none & Categorical balance variables and their
+levels \\
+\texttt{continuous()} & none & Continuous balance variables \\
+\texttt{ratio()} & 1 for all & Allocation ratio, any positive numbers \\
+\texttt{weights()} & equal & Positive weights of the balance variables \\
+\texttt{pstar()} & 0.30 & Imbalance probability limit $p^\ast$ \\
+\texttt{xi()} & 0.65 & Biased coin probability $\xi$ \\
+\texttt{runin()} & default & Run-in size; 0 removes the run-in \\
+\texttt{runinmethod()} & tilted & Tilted run-in or plain random allocation rule \\
+\texttt{forcedat()} & none & Enrollment totals at which the target counts are
+forced \\
+\texttt{sizebound()} & 3 & Big stick bound $B$ \\
+\texttt{codes()} & none & Treatment codes file with columns \texttt{code} and
+\texttt{arm} \\
+\texttt{seed()} & random & Seed of the random number generator \\
+\texttt{encrypt} & off & Store every dataset as an encrypted zip file \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Treatment codes, the study folder, and the random number state}
+
+A list of treatment codes is kept in a file with one row per code and the two
+columns \texttt{code} and \texttt{arm}. A participant's treatment code and id are
+what the user copies into the trial database. The package ships an example list
+of 200 codes. \texttt{gracedr codes} checks that every arm is valid and that the
+codes are unique.
+
+A study folder holds five datasets: the design, the participants, the codes, the
+audit log, and the random number state. A write goes first to a file with the
+extension \texttt{.tmp}, the current file is then copied to a file with the
+extension \texttt{.bak}, and the new file replaces the current one. Stata has no
+file rename, so the replacement is a copy.
+
+Randomization uses Stata's default generator. Each command saves the user's
+state, installs the study's state, makes its draw, stores the new state in the
+study folder, and restores the user's state, so a study neither depends on nor
+disturbs the random numbers of an interactive session. The state is a string of
+thousands of characters, which is stored in a \texttt{strL} variable. Each
+participant row stores the state in force before that participant's draw.
+\texttt{gracedr replay} installs the stored state, redoes the draw from the data
+before it, and compares the arm and the treatment code with the record.
+
+\subsection{Worked example}
+
+We create a study for 40 participants with two arms and the balance variables
+sex, race, and age, using the example codes and a seed.
+
+\begin{stlog}
+. gracedr setup, study("studies/example") n(40) arms(A B)
+>     categorical(sex: male female | race: white black other) continuous(age)
+>     codes("data/example_codes.csv") seed(20260611)
+gracedr: 200 treatment codes are valid.
+  arm A: 100 codes
+  arm B: 100 codes
+gracedr: study created in studies/example
+  40 participants planned, run-in 10, seed 20260611
+\end{stlog}
+
+\noindent The default run-in is 10 participants, from equation~(\ref{eq:runin}).
+We then randomize the 40 made-up participants of the file
+\texttt{example\_participants.dta} one at a time. Each call prints the id, the
+arm, the treatment code, and the group sizes. The last one is
+
+\begin{stlog}
+. gracedr randomize, study("studies/example") id(P040) sex(female) race(other)
+>     age(71.3)
+Participant P040 randomized to arm A
+Treatment code: 11394
+Group sizes
+Arm                        n     pct   Next target  Final target
+A                         20    50.0            20            20
+B                         20    50.0            20            20
+\end{stlog}
+
+\noindent The counts are exact at the final total of 40.
+\texttt{gracedr status} prints the group sizes and the balance table and, with
+\texttt{graphs}, draws the two graphs of figure~\ref{fig:status}.
+
+\begin{stlog}
+. gracedr status, study("studies/example") graphs
+Study status: 40 participants randomized
+Group sizes
+Arm                        n     pct   Next target  Final target
+A                         20    50.0            20            20
+B                         20    50.0            20            20
+Balance by arm
+  arm1 = A
+  arm2 = B
+
+  +-----------------------------------------------------------------+
+  | variable    level          arm1         arm2   nmissing     smd |
+  |-----------------------------------------------------------------|
+  |      sex     male    13 (65.0%)   14 (70.0%)          0   0.107 |
+  |      sex   female     7 (35.0%)    6 (30.0%)          0   0.107 |
+  |     race    white    10 (50.0%)   14 (70.0%)          0   0.417 |
+  |     race    black     4 (20.0%)    3 (15.0%)          0   0.417 |
+  |     race    other     6 (30.0%)    3 (15.0%)          0   0.417 |
+  |      age            60.0 (13.0)   60.0 (8.9)          0   0.000 |
+  +-----------------------------------------------------------------+
+\end{stlog}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.48\textwidth]{status-imbalance.pdf}
+\hfill
+\includegraphics[width=0.48\textwidth]{status-smd.pdf}
+\caption{The two graphs of \texttt{gracedr status} for the 40 participants.
+Left: deviation of each arm from its target count as enrollment proceeds, with
+the checkpoints marked. Right: largest absolute standardized mean difference of
+each balance variable.}
+\label{fig:status}
+\end{figure}
+
+An override changes one assignment and records a reason. It voids the old
+treatment code and assigns an unused code of the new arm. The original draw
+stays in the audit log.
+
+\begin{stlog}
+. gracedr override, study("studies/example") id(P040) arm(B)
+>     reason("Wrong race entered in the example.")
+Participant P040 changed from arm A to arm B
+Code 11394 voided, new code 71284
+\end{stlog}
+
+\noindent The last two rows of the audit log are then
+
+\begin{stlog}
+  |    action     id   old   new                               reason |
+  |-------------------------------------------------------------------|
+  | randomize   P040           A                                      |
+  |  override   P040     A     B   Wrong race entered in the example. |
+\end{stlog}
+
+\noindent A replay of each of the 40 participants reproduces the recorded arm
+and code, including P040, whose comparison uses the original arm and code from
+the audit log.
+
+\subsection{Simulation}
+
+\begin{stlog}
+\gracedr\ simulate, methods(\emph{string}) nsims(\#) seed(\#)
+    [study(\emph{folder}) | \emph{design options}] [generator(iid|drift)
+    probs(\emph{string}) meansd(\emph{string}) driftto(\emph{string}) phigh(\#)
+    saving(\emph{file}) summary(\emph{file}) clear]
+\end{stlog}
+
+\noindent The methods are \texttt{mmsb}, \texttt{srs} (simple randomization),
+\texttt{blocks} (permuted blocks of size twice the sum of the ratio, for
+whole-number ratios only),
+\texttt{minimization} (the Pocock and Simon rule, \citealp{pocock1975}), and
+\texttt{msb} (unmodified MSB: no group-size vote, no quota, and no bound).
+Virtual participants come from independent distributions for each balance
+variable: category probabilities for a categorical variable, given in
+\texttt{probs()}, and a normal distribution for a continuous one, given in
+\texttt{meansd()}. With \texttt{generator(drift)} each value moves in a straight
+line from its start value to its \texttt{driftto()} value over the enrollment.
+All methods allocate the same stream of participants, with the same random
+numbers, so the results for one method do not depend on which other methods are
+run. Simulation $j$ has its own seed drawn from \texttt{seed()}, so the first
+$j$ simulations are the same whatever \texttt{nsims()} is. Simulations run one at
+a time in a loop. With \texttt{study()} the command reads only the design and
+writes nothing to the folder.
+
+The results dataset has one row per simulation, method, and metric. The metrics
+are the largest absolute standardized mean difference and the standardized
+difference of each variable, and the absolute difference between each arm's
+count and its target, each at the end of the run-in, at each forced total, and
+at the end. Over the whole trial, they are the percent of assignments with a
+probability of 1, the longest run of forced assignments to one arm, and the
+expected probability of a correct guess for a guesser who always picks the arm
+furthest behind its target, computed from the stored assignment probabilities
+\citep{blackwell1957}.
+
+\section{Encrypted datasets}
+\label{sec:encrypt}
+
+\subsection{Why}
+
+The allocation sequence of a trial must stay concealed from the people who
+enroll participants, so the files of a live study should be unreadable without a
+password. Stata has no encrypted file format. We decided on a utility that is
+separate from the randomization commands and does not know about them, built on
+Python because Stata can run Python code and Python has a maintained package for
+AES-encrypted zip files, \texttt{pyzipper}. Users install that package
+themselves.
+
+\subsection{encsave and encuse}
+
+\begin{stlog}
+encsave using \emph{filename} [, replace session]
+
+encuse using \emph{filename} [, clear session]
+\end{stlog}
+
+\noindent \texttt{encsave} saves the dataset in memory to a temporary file,
+zips it with a password, and erases the temporary file, so that only the zip file
+remains. The zip uses AES-256 \citep{fips197}. \texttt{encuse} unzips to a
+temporary file, loads the data, and erases the temporary file. Both erase the
+temporary file on every exit path, including errors. A clear message tells the user how to
+install \texttt{pyzipper} and which Python Stata is using.
+
+\subsection{Handling the password}
+
+The commands read the password from the environment variable
+\texttt{GRACEDR\_PASSPHRASE}. If it is not set, a masked pop-up prompt opens
+through Python and asks for it, and asks twice when it saves a file. There is
+no \texttt{password()} option. Stata echoes command lines into the log and into
+the command history, so a password typed in a command would be written to
+both. The password is not stored in a file, and it goes to Python in memory, not
+on a command line. We check in the certification scripts that the password does
+not appear in the log, in \texttt{set trace} output, or in a displayed macro. A
+wrong password stops the command with error 499 and changes nothing.
+
+For commands that read a study repeatedly, the \texttt{session} option keeps
+the password in the memory of the Python process, once for each study folder, so
+that the pop-up opens once per study and not once per command. The password is
+forgotten after a wrong password, a different study folder gets its own entry,
+and the environment variable always wins when it is set. Calling \texttt{encsave}
+or \texttt{encuse} directly, without the \texttt{session} option, never caches the
+password.
+
+\subsection{Encrypted studies}
+
+The option \texttt{encrypt} of \texttt{gracedr setup} stores the design, the
+participants, the codes, the audit log, and the random number state as encrypted
+zip files, written by \texttt{encsave}. Every other \texttt{gracedr} command
+treats a folder that holds any of those zip files as an encrypted study, so it
+needs no option, and they all use the \texttt{session} option. A write goes to a
+file with the extension \texttt{.tmp.zip}, the current file is kept as a file
+with the extension \texttt{.bak.zip}, and the new file then replaces it. Each
+write first checks that the password opens the current archive, so a wrong
+password cannot overwrite a study. A folder that holds any of the zip files can
+never receive a plain dataset, because the extension is decided by what is
+already in the folder.
+
+In the worked example of section~\ref{sec:commands}, creating the same study
+with the option \texttt{encrypt} and randomizing the same 40 participants gives
+a folder with the files \texttt{audit.zip}, \texttt{codes.zip},
+\texttt{design.zip}, \texttt{participants.zip}, and \texttt{state.zip}, plus a
+\texttt{.bak.zip} copy of each file that was rewritten. With the same seed, the
+same participants, and the same override, its participant table equals that of
+the plain study in every variable except the time stamp.
+
+\subsection{Limits}
+
+Encryption protects files at rest. It does not hide the allocation from anyone
+who holds the password, so the password should be shared only with those who are
+meant to be unblinded. Stata itself makes temporary copies of the dataset in its
+temporary folder while a command runs, and these copies are plain. Stata erases
+them when the command ends, but after a crash one can remain. Users who need to
+keep the allocation sequence from the machine's other users should set Stata's
+temporary folder to a protected location. The commands that write the results of
+a simulation or a table to a file named by the user write plain datasets,
+because the user chooses those files.
+
+\section{Simulation study}
+\label{sec:sim}
+
+\subsection{Design}
+
+Each simulated trial enrolls $N \in \{200, 500\}$ participants into two arms in a
+1:1 ratio. The balance variables are sex, race (three levels), and age, with
+equal weights. The default run-in has 20 participants when $N = 200$ and 50 when
+$N = 500$. Two enrollment streams are used. In the \emph{iid} stream every
+participant is drawn from the same population: the probability of male sex is
+0.48, race is white, black, or other with probabilities 0.62, 0.23, and 0.15,
+and age is normal with mean 60 and standard deviation 10. In the \emph{drift}
+stream the population changes steadily over enrollment: the probability of male
+sex rises from 0.20 to 0.80, the probability of black race rises from 0.08 to
+0.48 with the share of other race fixed at 0.15, and mean age rises from 48 to 72
+years with standard deviation 8. Drift is a stress test, because any rule that
+concentrates one arm early or late converts the time trend into covariate
+imbalance.
+
+Five methods allocate the same participants, with the defaults of the package.
+The modified procedure and unmodified MSB use $p^\ast = 0.30$ and $\xi = 0.65$,
+and the modified procedure also uses $B = 3$ and the default run-in. Permuted
+blocks use blocks of size four. Minimization is the Pocock and Simon rule
+\citep{pocock1975}: for each candidate arm it adds the participant to that arm,
+takes the range of the arm counts divided by the target proportions within the
+participant's level of each variable, and sums these ranges over the variables
+with the design weights. Age is cut into three groups at the tertiles of 1,000
+generated participants. The arm with the smallest total is assigned with
+probability 0.8 (tied arms share it equally), and the other arms share the
+remaining probability in proportion to their target proportions.
+
+The measures fall into three groups. \emph{Balance} is the largest absolute standardized
+mean difference (SMD) \citep{austin2009} over the three balance variables at the
+end of enrollment and at the end of the run-in. For a categorical variable the
+SMD is the largest over its levels, with each level treated as a 0/1 indicator.
+\emph{Group size} is the absolute difference between the final count of the
+first arm and its target, and the percentage of trials in which the counts are
+exact at the end of the run-in and at the end of enrollment.
+\emph{Predictability} is measured by the percentage of assignments that are
+forced, meaning that some arm has probability one; by the longest run of
+consecutive forced assignments to the same arm; and by the expected probability
+of a correct guess under the strategy of \citet{blackwell1957}. The
+correct-guess probability is computed from the stored probabilities $\phi(i)$,
+not from realized draws.
+
+Every setting uses 1,000 simulated trials and the seed 20260611. A Monte Carlo
+standard error is the standard deviation of the per-trial values divided by
+$\sqrt{1000}$. All methods allocate the same participants within a trial, so
+differences between methods are computed within trials, and their standard
+errors reflect that pairing.
+
+\subsection{Results}
+
+Figure~\ref{fig:tradeoff} summarizes balance and predictability.
+Table~\ref{tab:balance} shows covariate balance. The modified procedure had a
+mean largest SMD at the end of enrollment of 0.162, 0.159, 0.097, and 0.093 in
+the four settings. This is lower than for simple randomization (0.212, 0.211,
+0.136, and 0.133) and for permuted blocks (0.214, 0.198, 0.133, and 0.125), and
+higher than for unmodified MSB (0.150, 0.152, 0.091, and 0.091) and for
+minimization (0.077, 0.073, 0.040, and 0.037). Table~\ref{tab:paired} gives the
+paired differences. Relative to unmodified MSB, the modified procedure was higher
+by 0.002 to 0.012 in the mean largest SMD.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Covariate balance. Largest absolute SMD over the three balance
+variables at the end of enrollment (mean, with Monte Carlo standard error in
+parentheses, and 95th percentile) and at the end of the run-in (mean). 1,000
+simulated trials per setting.}
+\label{tab:balance}
+\begin{tabular}{llrrr}
+\hline
+Setting & Method & End (SE) & End, 95th pct. & Run-in \\
+\hline
+$N=200$, iid & Simple & 0.212 (0.003) & 0.359 & 0.768 \\
+ & Permuted blocks & 0.214 (0.003) & 0.368 & 0.709 \\
+ & Minimization & 0.077 (0.001) & 0.151 & 0.494 \\
+ & MSB & 0.150 (0.001) & 0.221 & 0.622 \\
+ & Modified MSB & 0.162 (0.002) & 0.254 & 0.617 \\
+$N=200$, drift & Simple & 0.211 (0.003) & 0.355 & 0.734 \\
+ & Permuted blocks & 0.198 (0.003) & 0.338 & 0.691 \\
+ & Minimization & 0.073 (0.001) & 0.147 & 0.549 \\
+ & MSB & 0.152 (0.001) & 0.228 & 0.628 \\
+ & Modified MSB & 0.159 (0.002) & 0.251 & 0.613 \\
+$N=500$, iid & Simple & 0.136 (0.002) & 0.225 & 0.446 \\
+ & Permuted blocks & 0.133 (0.002) & 0.224 & 0.448 \\
+ & Minimization & 0.040 (0.001) & 0.091 & 0.234 \\
+ & MSB & 0.091 (0.001) & 0.136 & 0.341 \\
+ & Modified MSB & 0.097 (0.001) & 0.148 & 0.342 \\
+$N=500$, drift & Simple & 0.133 (0.002) & 0.213 & 0.447 \\
+ & Permuted blocks & 0.125 (0.002) & 0.213 & 0.448 \\
+ & Minimization & 0.037 (0.001) & 0.078 & 0.285 \\
+ & MSB & 0.091 (0.001) & 0.135 & 0.350 \\
+ & Modified MSB & 0.093 (0.001) & 0.143 & 0.353 \\
+\hline
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:sizes} shows group sizes. The modified procedure met the group
+sizes at the end of the run-in and at the end of enrollment in every trial in all
+four settings. Permuted blocks of size four met the final sizes in every trial
+but the run-in sizes in only 68\% of trials when $N = 500$, because the run-in
+of 50 is not a multiple of the block size. Unmodified MSB missed the final sizes
+by a mean of 5.75, 6.14, 9.23, and 10.22 participants, with a maximum of 44, and
+it was exact at the end in 2.4\% to 5.3\% of trials. Minimization missed the
+final sizes by a mean of 0.62 to 0.66 participants and was exact in 43.7\% to
+46.8\% of trials.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Group sizes. Percentage of trials in which the arm counts equal their
+targets at the end of the run-in and at the end of enrollment (exact, in
+percent), and the absolute
+difference between the final count of the first arm and its target (mean, with
+the maximum in parentheses). Methods: simple randomization (Simple), permuted
+blocks of size four (Blocks), minimization, unmodified MSB, and the modified
+procedure.}
+\label{tab:sizes}
+\begin{tabular}{llrrr}
+\hline
+Setting & Method & Run-in (\%) & End (\%) & Final difference \\
+\hline
+$N=200$, iid & Simple & 18.6 & 6.9 & 5.50 (23) \\
+ & Permuted blocks & 100.0 & 100.0 & 0.00 (0) \\
+ & Minimization & 48.9 & 45.3 & 0.64 (4) \\
+ & MSB & 17.2 & 4.4 & 5.75 (25) \\
+ & Modified MSB & 100.0 & 100.0 & 0.00 (0) \\
+$N=200$, drift & Simple & 18.6 & 6.9 & 5.50 (23) \\
+ & Permuted blocks & 100.0 & 100.0 & 0.00 (0) \\
+ & Minimization & 54.8 & 46.7 & 0.63 (4) \\
+ & MSB & 17.3 & 5.3 & 6.14 (26) \\
+ & Modified MSB & 100.0 & 100.0 & 0.00 (0) \\
+$N=500$, iid & Simple & 11.0 & 3.0 & 8.72 (37) \\
+ & Permuted blocks & 68.0 & 100.0 & 0.00 (0) \\
+ & Minimization & 46.2 & 43.7 & 0.66 (4) \\
+ & MSB & 11.1 & 3.2 & 9.23 (34) \\
+ & Modified MSB & 100.0 & 100.0 & 0.00 (0) \\
+$N=500$, drift & Simple & 11.0 & 3.0 & 8.72 (37) \\
+ & Permuted blocks & 68.0 & 100.0 & 0.00 (0) \\
+ & Minimization & 50.7 & 46.8 & 0.62 (3) \\
+ & MSB & 10.7 & 2.4 & 10.22 (44) \\
+ & Modified MSB & 100.0 & 100.0 & 0.00 (0) \\
+\hline
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:predictability} shows predictability. The modified procedure
+forced 2.4\% of assignments when $N = 200$ and 1.7\% when $N = 500$, with a
+longest run of forced assignments to one arm that averaged 2.1 to 2.3 and
+reached 7 and 10. Its expected correct-guess probability was 59.34\%, 59.31\%,
+58.50\%, and 58.48\%. This is 8.5 to 9.3 percentage points above simple
+randomization, 11.4 to 12.4 points below permuted blocks of size four
+(70.79\% to 70.85\%), and 2.4 to 3.4 points below minimization (61.66\% to
+62.12\%). Unmodified MSB had a correct-guess probability of 49.59\% to 49.93\%.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Predictability. Percentage of assignments that are forced, the longest
+run of consecutive forced assignments to the same arm (mean, with the maximum in
+parentheses), and the expected probability of a correct guess in percent under
+the strategy of \citet{blackwell1957} (mean, with Monte Carlo standard error in
+parentheses).}
+\label{tab:predictability}
+\begin{tabular}{llrrr}
+\hline
+Setting & Method & Forced (\%) & Longest run & Guess (\%) \\
+\hline
+$N=200$, iid & Simple & 0.0 & 0.0 (0) & 50.00 (0.00) \\
+ & Permuted blocks & 33.2 & 2.0 (2) & 70.79 (0.03) \\
+ & Minimization & 0.0 & 0.0 (0) & 61.75 (0.05) \\
+ & MSB & 0.0 & 0.0 (0) & 49.89 (0.03) \\
+ & Modified MSB & 2.4 & 2.1 (7) & 59.34 (0.04) \\
+$N=200$, drift & Simple & 0.0 & 0.0 (0) & 50.00 (0.00) \\
+ & Permuted blocks & 33.2 & 2.0 (2) & 70.79 (0.03) \\
+ & Minimization & 0.0 & 0.0 (0) & 62.12 (0.05) \\
+ & MSB & 0.0 & 0.0 (0) & 49.59 (0.05) \\
+ & Modified MSB & 2.4 & 2.1 (7) & 59.31 (0.05) \\
+$N=500$, iid & Simple & 0.0 & 0.0 (0) & 50.00 (0.00) \\
+ & Permuted blocks & 33.4 & 2.0 (2) & 70.85 (0.02) \\
+ & Minimization & 0.0 & 0.0 (0) & 61.66 (0.03) \\
+ & MSB & 0.0 & 0.0 (0) & 49.93 (0.02) \\
+ & Modified MSB & 1.7 & 2.2 (10) & 58.50 (0.03) \\
+$N=500$, drift & Simple & 0.0 & 0.0 (0) & 50.00 (0.00) \\
+ & Permuted blocks & 33.4 & 2.0 (2) & 70.85 (0.02) \\
+ & Minimization & 0.0 & 0.0 (0) & 61.86 (0.04) \\
+ & MSB & 0.0 & 0.0 (0) & 49.67 (0.04) \\
+ & Modified MSB & 1.7 & 2.3 (10) & 58.48 (0.03) \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Differences from the modified procedure within trials (other method
+minus modified procedure), with 95\% intervals from the paired Monte Carlo
+standard error. A positive difference in the largest SMD means the other method
+balances worse. A positive difference in the correct-guess probability means the
+other method is more predictable.}
+\label{tab:paired}
+\begin{tabular}{llrr}
+\hline
+Setting & Method & Largest SMD & Guess (\%) \\
+\hline
+$N=200$, iid & Simple & 0.0499 (0.0452, 0.0546) &
+$-$9.3 ($-$9.4, $-$9.3) \\
+ & Permuted blocks & 0.0523 (0.0467, 0.0578) & 11.4 (11.3, 11.5) \\
+ & Minimization & $-$0.0846 ($-$0.0884, $-$0.0807) & 2.4 (2.3, 2.5) \\
+ & MSB & $-$0.0118 ($-$0.0152, $-$0.0085) & $-$9.4 ($-$9.6, $-$9.3) \\
+$N=200$, drift & Simple & 0.0523 (0.0476, 0.0571) &
+$-$9.3 ($-$9.4, $-$9.2) \\
+ & Permuted blocks & 0.0390 (0.0336, 0.0444) & 11.5 (11.4, 11.6) \\
+ & Minimization & $-$0.0859 ($-$0.0898, $-$0.0820) & 2.8 (2.7, 2.9) \\
+ & MSB & $-$0.0072 ($-$0.0107, $-$0.0037) & $-$9.7 ($-$9.8, $-$9.6) \\
+$N=500$, iid & Simple & 0.0396 (0.0367, 0.0425) &
+$-$8.5 ($-$8.6, $-$8.4) \\
+ & Permuted blocks & 0.0362 (0.0327, 0.0396) & 12.4 (12.3, 12.4) \\
+ & Minimization & $-$0.0561 ($-$0.0585, $-$0.0538) & 3.2 (3.1, 3.2) \\
+ & MSB & $-$0.0057 ($-$0.0076, $-$0.0039) & $-$8.6 ($-$8.6, $-$8.5) \\
+$N=500$, drift & Simple & 0.0401 (0.0373, 0.0430) &
+$-$8.5 ($-$8.5, $-$8.4) \\
+ & Permuted blocks & 0.0317 (0.0286, 0.0349) & 12.4 (12.3, 12.4) \\
+ & Minimization & $-$0.0558 ($-$0.0581, $-$0.0535) & 3.4 (3.3, 3.5) \\
+ & MSB & $-$0.0021 ($-$0.0040, $-$0.0002) & $-$8.8 ($-$8.9, $-$8.7) \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{tradeoff.pdf}
+\caption{Balance and predictability in the four settings. Horizontal axis:
+expected correct-guess probability. Vertical axis: mean largest SMD at the end of
+enrollment. The lower left is better. Standard errors are smaller than the
+plotting symbols.}
+\label{fig:tradeoff}
+\end{figure}
+
+\section{Computational details}
+
+The results in this article were produced with Stata 19.5 on Windows and the
+\gracedr\ package installed from the GitHub repository
+\texttt{BiostatDoc/graceDR}. The folder
+\texttt{SJarticle/}\allowbreak\texttt{replication} holds the do-files that
+install the package, install \texttt{pyzipper}, and reproduce every table,
+figure, and listing of this article, and the log of the run that made them. The
+whole run takes about nine minutes. The package is installed with the command
+\texttt{net install gracedr} and its \texttt{from()} option, which names the
+\texttt{stata} folder of the repository on the \texttt{main} branch. The
+certification scripts of the package are in the folder \texttt{stata/cert}.
+
+\section{Conclusions}
+\label{sec:conclusions}
+
+The simulations support a specific and limited claim. The modified procedure
+delivers what MSB as published does not: exact group sizes at the end of the
+run-in and at the end of enrollment in every simulated trial. It does so with
+1.7\% to 2.4\% forced assignments and a correct-guess probability 8.5 to 9.3
+percentage points above simple randomization and 11.4 to 12.4 points below
+permuted blocks of size four. The price in covariate balance, relative to
+unmodified MSB, is small, 0.002 to 0.012 in the mean largest SMD at the end, and
+the procedure kept most of the improvement of MSB over simple randomization.
+
+The simulations do not show that the modified procedure balances covariates
+better than every alternative. Minimization had clearly smaller standardized
+differences in all four settings (tables~\ref{tab:balance} and
+\ref{tab:paired}), with an expected correct-guess probability only 2.4 to 3.4
+percentage points above that of the modified procedure, and its final group
+sizes were exact in fewer than half of the trials. Which trade-off is preferable
+depends on the protocol. If exact group sizes at named enrollment totals are
+required, the modified procedure and permuted blocks guarantee them and
+minimization as simulated here does not. If group sizes may differ by a few
+participants and balance on the controlled covariates is the main concern,
+minimization performed best on balance in these simulations.
+
+Several limitations restrict how far the results extend.
+\begin{itemize}
+\item The simulations use one design: two arms in a 1:1 ratio and three balance
+variables with equal weights. The software handles more arms, unequal ratios,
+unequal weights, and forced totals before the end of enrollment, but none of
+these were simulated here.
+\item Only two enrollment streams were used, and the drift was a steady change
+over the whole enrollment. Earlier, abrupt, or larger changes were not examined.
+\item The modified procedure was run with its defaults, and the three fixed
+internal choices were not varied. The comparators were also run at one setting
+each, with blocks of size four and a probability of 0.8 in minimization.
+\item Balance was measured by the largest SMD at the end of enrollment and at
+the end of the run-in. We did not examine balance during enrollment, the power
+of a treatment comparison, or bias in the estimated treatment effect, which
+\citet{lauzon2022msb} studied for MSB. Minimization controls the margins that
+the SMD measures, which may favor it on this measure.
+\item The Monte Carlo standard errors describe simulation error for these
+designs and streams, not uncertainty about other designs.
+\item The correct-guess probability is the expected value under one guessing
+strategy \citep{blackwell1957}. An adversary with more information could do
+better.
+\end{itemize}
+
+Because live randomization and simulation use the same allocation code, an
+investigator can run \texttt{gracedr simulate} on the trial's own design and
+expected enrollment pattern before the trial starts. We recommend doing so
+instead of relying on the settings simulated here. The encrypted study protects
+the files at rest, but who can read the allocation still depends on who holds
+the password.
+
+\bibliographystyle{sj}
+\bibliography{references}
+
+\begin{aboutauthors}
+Grace Huiyi Ma is a student in the STEM Magnet Program at Dutch Fork High
+School in Irmo, South Carolina.
+
+James W. Hardin is a professor of biostatistics in the Department of
+Epidemiology and Biostatistics at the University of South Carolina in Columbia,
+South Carolina.
+\end{aboutauthors}
+
+\end{document}
