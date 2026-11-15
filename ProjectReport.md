@@ -11,7 +11,7 @@ lives in the public repository `BiostatDoc/graceDR`.
 The package is named `graceDR`, not `grace` as in the specification, because the name `grace`
 conflicts with an archived CRAN package named Grace.
 
-A Stata 19 version of the package, the command `gracedr`, is under way in the same repository. It
+A Stata 19 version of the package, the command `gracedr`, is in the same repository. It
 is described in the section "The Stata version".
 
 This report contains everything in `ProjectDescription.md` and adds the steps
@@ -147,7 +147,7 @@ passphrase for the encrypted file. The program produces nothing for blinded staf
 
 ## The Stata version
 
-The package is also being built for Stata 19 as the command `gracedr`, in the `stata` folder of
+The package is also built for Stata 19 as the command `gracedr`, in the `stata` folder of
 the same repository. It follows the same method and the same workflow as the R package, in a
 Stata idiom. It runs on Windows only, and its design is in
 `docs/superpowers/specs/2026-11-13-stata-addition-design.md`.
@@ -204,19 +204,23 @@ match its own results across machines. The Stata certification does not use R ou
 
 ### Encrypted datasets
 
-Stata has no encrypted files, so the plan adds a separate command pair, built on the Python
+Stata has no encrypted files, so the package has a separate command pair, built on the Python
 package `pyzipper`, that saves a dataset as an AES-256 zip file and loads it again. It does
 not know about randomization. A study can be chosen at setup to be encrypted, in which case
 every dataset in its folder is an encrypted zip. The passphrase comes from the environment
 variable `GRACEDR_PASSPHRASE` or a masked pop-up, never from a command option, so it never
 reaches the log.
 
-### Still to come
+### Distribution, article, and replication package
 
-The encrypted datasets, the installable package files, a Stata Journal article, and its
-replication package are not finished. The article has Grace Huiyi Ma as first author and
-Dr. Hardin as corresponding author, and it includes the development of saving and using
-encrypted Stata datasets.
+The package is installed with `net install gracedr` from the `stata` folder of the repository,
+which holds the package file `gracedr.pkg` and the table of contents `stata.toc`. `net get gracedr`
+copies the example data. The Stata Journal article is in `SJarticle/article.tex`. It has Grace
+Huiyi Ma as first author and Dr. Hardin as corresponding author, and it includes the development
+of saving and using encrypted Stata datasets. The journal's article tag, volume, and issue are
+placeholders for the editors. Its replication package is in `SJarticle/replication`. It holds
+do-files that install `gracedr` and `pyzipper` and reproduce every table and figure, and the log
+of the run.
 
 ## Grace's steps
 
@@ -245,7 +249,7 @@ Grace Ma's work on the project followed these steps, in order.
 10. Took a project from the specification to the implementation plan.
 11. Packaged the software with documentation and submitted a manuscript to the Journal of
     Statistical Software.
-12. Is translating the package into a Stata command, `gracedr`, and plans a Stata Journal article
+12. Translated the package into a Stata command, `gracedr`, and wrote a Stata Journal article
     and its replication package. The Stata work used the same process: a design, an implementation
     plan, Jira cards, and one pull request per card.
 
@@ -364,8 +368,8 @@ minimization in these simulations.
 
 The Stata version has the commands `gracedr setup`, `codes`, `randomize`, `status`, `override`,
 `audit`, `replay`, and `simulate`, each with a help file and a certification do-file. The
-encrypted datasets, the installable package files, the Stata Journal article, and its replication
-package remain to be done.
+encrypted datasets (`encsave`, `encuse`, and encrypted studies), the installable package files,
+the Stata Journal article, and its replication package are done.
 
 ## References
 
