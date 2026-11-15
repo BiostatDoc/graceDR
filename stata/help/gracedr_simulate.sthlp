@@ -94,6 +94,11 @@ point and metric with the mean, standard deviation, 95th and 99th percentiles (t
 maximum. Missing values are left out, and a group with no values gives a missing summary.
 
 {pstd}
+{opt saving()} and {opt summary()} write plain datasets, also when {opt study()} names an
+encrypted study, because you name those files. They are not encrypted. Save them in a folder that
+only the people who may see them can read, or save them again with {helpb encsave}.
+
+{pstd}
 Simulations run one at a time in one loop. There is no parallel option.
 
 

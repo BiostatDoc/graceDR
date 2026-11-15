@@ -291,6 +291,12 @@ expect_failure, ///
     rc(602) ///
     message("gracedr: setup stopped before it finished.") ///
     command(`"gracedr setup, study("`scratch'/partial") n(60) arms(A B) `balance' seed(4)"')
+quietly mkdir "`scratch'/partial_again"
+quietly copy "`one'/state.dta" "`scratch'/partial_again/state.dta"
+expect_failure, ///
+    rc(602) ///
+    message("and any .tmp or .bak copies of them") ///
+    command(`"gracedr setup, study("`scratch'/partial_again") n(60) arms(A B) `balance' seed(4)"')
 assert _N == 3
 assert x[3] == 30
 assert c(rngstate) == "`partial_state'"

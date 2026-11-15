@@ -43,6 +43,10 @@ checkpoint must already be reached. {opt vars()} keeps variables
 in the order of the design.
 
 {pstd}
+{opt saving()} writes plain graph files, also for an encrypted study, because you name them. They
+are not encrypted. Save them in a folder that only the people who may see them can read.
+
+{pstd}
 Without {opt graphs} no graph is drawn. With it the graphs are named {cmd:gracedr_imbalance} and
 {cmd:gracedr_smd}.
 
