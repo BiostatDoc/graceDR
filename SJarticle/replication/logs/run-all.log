@@ -18,11 +18,13 @@
 . global seed 20260611
 
 . 
+. local release "stata-v0.1.0"
+
 . local source : environment GRACEDR_SOURCE
 
 . if "`source'" == "" {
-.     local source "https://raw.githubusercontent.com/BiostatDoc/graceDR/main/st
-> ata"
+.     local source "https://raw.githubusercontent.com/BiostatDoc/graceDR/`releas
+> e'/stata"
 . }
 
 . quietly net install gracedr, from("`source'") replace
@@ -64,7 +66,7 @@
 ...     import pyzipper
 ... except ImportError:
 ...     subprocess.check_call([sys.executable, "-m", "pip", "install", "pyzipper
-> "])
+> ==0.4.0"])
 ...     import pyzipper
 >>> end
 --------------------------------------------------------------------------------
@@ -656,7 +658,7 @@ end of do-file
 >     categorical(sex: male female | race: white black other) ///
 >     continuous(age) ///
 >     codes("data/example_codes.csv") ///
->     seed(20260611)
+>     seed(${seed})
 gracedr: 200 treatment codes are valid.
   arm A: 100 codes
   arm B: 100 codes
@@ -1067,7 +1069,7 @@ end of do-file
 >     categorical(sex: male female | race: white black other) ///
 >     continuous(age) ///
 >     codes("data/example_codes.csv") ///
->     seed(20260611) ///
+>     seed(${seed}) ///
 >     encrypt
 gracedr: 200 treatment codes are valid.
   arm A: 100 codes
@@ -1383,6 +1385,22 @@ end of do-file
 . 
 . use "results/stats_all.dta", clear
 
+. local position = 0
+
+. foreach cell of global cells {
+  2.     local position = `position' + 1
+  3.     quietly levelsof setting if cellno == `position', local(panel_text)
+  4.     label define panel_label `position' `panel_text', add
+  5. }
+
+. label values cellno panel_label
+
+. quietly summarize meanguess
+
+. local axis_low = floor(r(min) - 2)
+
+. local axis_high = ceil(r(max) + 12)
+
 . local symbols "Oh Th S X O"
 
 . local plots ""
@@ -1399,10 +1417,10 @@ end of do-file
   8. }
 
 . twoway `plots', ///
->     by(setting, cols(2) legend(off) note("")) ///
+>     by(cellno, cols(2) legend(off) note("")) ///
 >     xtitle("Correct-guess probability (%)") ///
 >     ytitle("Mean largest SMD at end") ///
->     xscale(range(44 82)) ///
+>     xscale(range(`axis_low' `axis_high')) ///
 >     ylabel(, angle(horizontal))
 
 . graph export "figures/tradeoff.pdf", replace
