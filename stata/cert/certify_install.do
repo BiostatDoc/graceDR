@@ -37,7 +37,7 @@ program define check_package_files
     assert inrange(strpos("`package_lines'", "[v 3]"), 1, 1e9)
     assert regexm("`package_lines'", "d Distribution-Date: 20[0-9][0-9][01][0-9][0-3][0-9]")
     local expected_count = 0
-    foreach folder in ado help data {
+    foreach folder in ado help data python {
         local files : dir "`stata_dir'/`folder'" files "*"
         foreach file of local files {
             local entry "[f `folder'/`file']"
@@ -54,7 +54,7 @@ end
 
 program define check_installed_under
     args stata_dir plus_folder
-    foreach folder in ado help {
+    foreach folder in ado help python {
         local files : dir "`stata_dir'/`folder'" files "*"
         foreach file of local files {
             quietly findfile `file'
@@ -127,6 +127,13 @@ program define run_install_checks
         saving("`scratch'/simulated.dta")
     assert r(nsims) == 2
     confirm file "`scratch'/simulated.dta"
+    python: import os; os.environ["GRACEDR_PASSPHRASE"] = "install check passphrase"
+    use "example_participants.dta", clear
+    local rows = _N
+    encsave using "`scratch'/round trip.zip", replace
+    clear
+    encuse using "`scratch'/round trip.zip", clear
+    assert _N == `rows'
     gracedr
 end
 

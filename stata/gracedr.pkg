@@ -35,6 +35,7 @@ f ado/_gracedr_tables.ado
 f ado/_gracedr_utc.ado
 f ado/_gracedr_values.ado
 f ado/_gracedr_votes.ado
+f ado/_gracedr_zip_folder.ado
 f ado/gracedr.ado
 f ado/gracedr_audit.ado
 f ado/gracedr_codes.ado
@@ -44,6 +45,8 @@ f ado/gracedr_replay.ado
 f ado/gracedr_setup.ado
 f ado/gracedr_simulate.ado
 f ado/gracedr_status.ado
+f ado/encsave.ado
+f ado/encuse.ado
 f help/gracedr.sthlp
 f help/gracedr_audit.sthlp
 f help/gracedr_codes.sthlp
@@ -53,6 +56,9 @@ f help/gracedr_replay.sthlp
 f help/gracedr_setup.sthlp
 f help/gracedr_simulate.sthlp
 f help/gracedr_status.sthlp
+f help/encsave.sthlp
+f help/encuse.sthlp
+f python/gracedr_zip.py
 f data/example_codes.csv
 f data/example_codes.dta
 f data/example_participants.dta
