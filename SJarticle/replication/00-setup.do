@@ -8,9 +8,10 @@ global methods srs blocks minimization msb mmsb
 global nsims 1000
 global seed 20260611
 
+local release "stata-v0.1.0"
 local source : environment GRACEDR_SOURCE
 if "`source'" == "" {
-    local source "https://raw.githubusercontent.com/BiostatDoc/graceDR/main/stata"
+    local source "https://raw.githubusercontent.com/BiostatDoc/graceDR/`release'/stata"
 }
 quietly net install gracedr, from("`source'") replace
 
@@ -38,7 +39,7 @@ import sys
 try:
     import pyzipper
 except ImportError:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "pyzipper"])
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "pyzipper==0.4.0"])
     import pyzipper
 end
 

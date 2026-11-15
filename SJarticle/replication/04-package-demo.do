@@ -12,7 +12,7 @@ gracedr setup, ///
     categorical(sex: male female | race: white black other) ///
     continuous(age) ///
     codes("data/example_codes.csv") ///
-    seed(20260611)
+    seed(${seed})
 
 use "data/example_participants.dta", clear
 local total = _N

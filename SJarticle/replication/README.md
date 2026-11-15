@@ -95,12 +95,14 @@ so after a failed run, restart Stata.
 `00-setup.do` runs `net install gracedr` and `net get gracedr` (into `data/`) from this address:
 
 ```
-https://raw.githubusercontent.com/BiostatDoc/graceDR/main/stata
+https://raw.githubusercontent.com/BiostatDoc/graceDR/stata-v0.1.0/stata
 ```
 
-That is the `main` branch, not a release, so a later run can differ from the stored log if
-`gracedr` has changed since. To install from another place, such as a clone of the repository,
-set the environment variable `GRACEDR_SOURCE` to its `stata` folder before you start Stata. The
+That is the release tag `stata-v0.1.0`, so every run installs the same package code and gives the
+same log. To use a newer release, change `release` in `00-setup.do`. `pyzipper` is installed at
+version 0.4.0, the version of the stored log, when it is missing. To install from another place,
+such as a clone of the repository, set the environment variable `GRACEDR_SOURCE` to its `stata`
+folder before you start Stata. The
 install goes to your `PLUS` folder and replaces an older `gracedr` there. A copy of `gracedr` in a
 folder that comes before `PLUS` in the ado-path, such as `PERSONAL`, would hide it, so
 `00-setup.do` stops with an error when it finds one.
