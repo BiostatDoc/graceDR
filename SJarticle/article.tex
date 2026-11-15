@@ -371,13 +371,24 @@ extension \texttt{.bak}, and the new file replaces the current one. Stata has no
 file rename, so the replacement is a copy.
 
 Randomization uses Stata's default generator. Each command saves the user's
-state, installs the study's state, makes its draw, stores the new state in the
-study folder, and restores the user's state, so a study neither depends on nor
-disturbs the random numbers of an interactive session. The state is a string of
-thousands of characters, which is stored in a \texttt{strL} variable. Each
-participant row stores the state in force before that participant's draw.
-\texttt{gracedr replay} installs the stored state, redoes the draw from the data
-before it, and compares the arm and the treatment code with the record.
+state, installs the study's state, makes its draw, and restores the user's state,
+so a study neither depends on nor disturbs the random numbers of an interactive
+session. The state is a string of thousands of characters, which is stored in a
+\texttt{strL} variable. Each participant row stores the state in force before
+that participant's draw.
+
+A draw takes one uniform random number from the study's state and uses it to
+choose the arm from the allocation probabilities. When the study has treatment
+codes, the draw takes a second uniform number from the same state and uses it to
+choose among the unused codes of the chosen arm. One stored state therefore
+reproduces both the arm and the treatment code. The new state is not stored
+until the end: \texttt{gracedr randomize} writes the participant, code, and audit
+files first and then writes the new state, and it refuses to write the state if
+the state in the study folder is no longer the one that the draw started from. If
+an earlier write fails, the state is unchanged, and the command lists the files that
+were already written. \texttt{gracedr replay} installs the stored state, redoes the
+draw from the data before it, and compares the arm and the treatment code with
+the record.
 
 \subsection{Worked example}
 
