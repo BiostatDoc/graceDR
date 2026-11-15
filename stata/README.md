@@ -67,10 +67,25 @@ each command is its own file. Subcommands that are not written yet say so.
 | `gracedr simulate` | `ado/gracedr_simulate.ado` | Simulates trials under several methods |
 
 `data/` holds `example_codes.csv` and `.dta` (the same 200 codes as the R package) and
-`example_participants.dta` (40 made-up participants). `help/` holds the `.sthlp` files. To read
-them in Stata, add the folders to the adopath with `adopath ++ "<this folder>/ado"` and
-`adopath ++ "<this folder>/help"`. The help examples read the data with paths that start at the
-repository root.
+`example_participants.dta` (40 made-up participants). `help/` holds the `.sthlp` files.
+
+## Install
+
+`gracedr.pkg` and `stata.toc` make this folder a Stata package. From a clone of the repository:
+
+```stata
+net install gracedr, from("<path to this folder>") replace
+net get gracedr, from("<path to this folder>")
+```
+
+`net install` copies the ado-files, the `.mata` files and the help files into the `PLUS`
+directory. The `.mata` files go with the ado-files because each command loads its Mata code with
+`findfile`. `net get` copies the example data files into the current folder, because `net install`
+does not copy data files. The help examples use the file names without a path. To work from the
+clone without installing, add the folders to the adopath with `adopath ++ "<this folder>/ado"` and
+`adopath ++ "<this folder>/help"`. `cert/certify_install.do` installs the package into a scratch
+`PLUS` directory and runs every command from there. It also checks that every file in `ado/`,
+`help/` and `data/` is listed in `gracedr.pkg`.
 
 ## Study files
 

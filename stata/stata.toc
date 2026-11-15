@@ -1,0 +1,4 @@
+v 3
+d gracedr: Stata version of graceDR
+d Group-adaptive randomization with a study folder
+p gracedr Group-adaptive randomization with a study folder

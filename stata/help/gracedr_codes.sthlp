@@ -38,8 +38,12 @@ of {cmd:codes.dta} in a study folder.
 
 {title:Examples}
 
-{phang2}{cmd:. gracedr codes using "stata/data/example_codes.csv", arms(A B)}{p_end}
-{phang2}{cmd:. gracedr codes using "stata/data/example_codes.dta", arms(A B)}{p_end}
+{pstd}
+The example files come with the package. Run {cmd:net get gracedr} once to copy them into the
+current folder.
+
+{phang2}{cmd:. gracedr codes using "example_codes.csv", arms(A B)}{p_end}
+{phang2}{cmd:. gracedr codes using "example_codes.dta", arms(A B)}{p_end}
 
 
 {title:Stored results}
