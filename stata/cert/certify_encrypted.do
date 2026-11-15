@@ -125,6 +125,13 @@ expect_failure, ///
     rc(602) ///
     message("a study already exists") ///
     command(`"gracedr setup, study("`secret'") n(40) arms(A B) `design' seed(1)"')
+local partial_zip "`scratch'/partial_zip"
+quietly mkdir "`partial_zip'"
+quietly copy "`secret'/state.zip" "`partial_zip'/state.zip"
+expect_failure, ///
+    rc(602) ///
+    message("and any .tmp.zip or .bak.zip copies of them") ///
+    command(`"gracedr setup, study("`partial_zip'") n(40) arms(A B) `design' seed(1) encrypt"')
 _gracedr_study exists, study("`secret'")
 assert r(exists) == 1
 
@@ -232,6 +239,10 @@ local held_vars "`r(varlist)'"
 expect_failure, ///
     rc(499) ///
     message("wrong password") ///
+    command(`"_gracedr_study write, study("`secret'") name(participants)"')
+expect_failure, ///
+    rc(499) ///
+    message("gracedr: could not write participants.zip") ///
     command(`"_gracedr_study write, study("`secret'") name(participants)"')
 assert _N == 3
 quietly describe, varlist

@@ -119,8 +119,13 @@ program define gracedr_setup, rclass
         _gracedr_study extension, study(`"`macval(study)'"')
         local extension "`r(extension)'"
         display as error "gracedr: setup stopped before it finished."
+        local leftovers ".tmp or .bak"
+        if "`extension'" == "zip" {
+            local leftovers ".tmp.zip or .bak.zip"
+        }
         display as error `"Remove design.`extension', codes.`extension', "' ///
-            `"participants.`extension', audit.`extension' and state.`extension' "' ///
+            `"participants.`extension', audit.`extension' and state.`extension', "' ///
+            `"and any `leftovers' copies of them, "' ///
             `"from `macval(study)' and run setup again."'
         exit `failure'
     }

@@ -192,7 +192,14 @@ program define _gracedr_study_write
     if "`extension'" == "zip" {
         local pending "`macval(folder)'/`macval(name)'.tmp.zip"
         local backup "`macval(folder)'/`macval(name)'.bak.zip"
-        _gracedr_study_verify, current("`macval(current)'")
+        capture noisily _gracedr_study_verify, current("`macval(current)'")
+        local refused = _rc
+        local verified = `refused' == 0
+        if `verified' == 0 {
+            display as error ///
+                `"gracedr: could not write `macval(name)'.`extension' in `macval(study)'"'
+            exit `refused'
+        }
         capture noisily encsave using "`macval(pending)'", replace session
     }
     else {
