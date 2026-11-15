@@ -10,9 +10,18 @@ do "`stata_dir'/cert/helpers.do"
 program define assert_no_new_files
     args before
     local after : dir "`c(tmpdir)'" files "*"
+    local unexpected ""
     foreach file of local after {
-        assert `: list file in before'
+        local is_known : list file in before
+        local is_shell_probe = strpos("`file'", "__PSScriptPolicyTest") == 1
+        if `is_known' == 0 & `is_shell_probe' == 0 {
+            local unexpected "`unexpected' `file'"
+        }
     }
+    if !missing("`unexpected'") {
+        display as error "new files in `c(tmpdir)':`unexpected'"
+    }
+    assert missing("`unexpected'")
 end
 
 program define assert_only_zips
