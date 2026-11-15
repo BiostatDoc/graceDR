@@ -6,6 +6,8 @@ program define _gracedr_save
     if missing("`action'") {
         local action randomize
     }
+    _gracedr_study extension, study(`"`macval(study)'"')
+    local extension "`r(extension)'"
     if "`step'" == "audit" {
         capture _gracedr_study append_audit, ///
             study(`"`macval(study)'"') ///
@@ -28,10 +30,10 @@ program define _gracedr_save
     }
     local failure = _rc
     if `failure' == 0 {
-        c_local written "`written' `step'.dta"
+        c_local written "`written' `step'.`extension'"
         exit
     }
-    display as error `"gracedr: could not write `step'.dta in `macval(study)'"'
+    display as error `"gracedr: could not write `step'.`extension' in `macval(study)'"'
     local files = strtrim("`written'")
     if missing("`files'") {
         display as error "gracedr: no study files were changed"

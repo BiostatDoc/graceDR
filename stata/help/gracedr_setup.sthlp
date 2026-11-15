@@ -43,6 +43,7 @@ and never above {cmd:n()}{p_end}
 {synopt:{opt codes(file)}}treatment codes, a CSV or Stata dataset with columns
 {cmd:code} and {cmd:arm}{p_end}
 {synopt:{opt seed(#)}}whole number from 0 to 2147483647{p_end}
+{synopt:{opt encrypt}}store every dataset as an AES-256 encrypted zip{p_end}
 {synoptline}
 
 
@@ -74,6 +75,24 @@ when the seed must not be guessable.
 
 {pstd}
 Arm labels and levels must not contain double quotes, backticks or dollar signs.
+
+{pstd}
+With {opt encrypt}, the five datasets are stored as {cmd:design.zip}, {cmd:participants.zip},
+{cmd:codes.zip}, {cmd:audit.zip} and {cmd:state.zip}, each an AES-256 zip made by
+{help encsave}. Every other {cmd:gracedr} command finds out that a study is encrypted from the zip files in its
+folder, so it needs no option. The password comes from the environment variable
+{cmd:GRACEDR_PASSPHRASE}. If that is not set, a masked pop-up asks for it once for each study folder, and
+the Python session remembers it until Stata closes. It is never stored in a file, a log or a
+Stata macro. A write goes to {cmd:.tmp.zip}, keeps the current file as {cmd:.bak.zip}, and then
+replaces the current file. A write is refused unless the password opens the current file, so a
+wrong password cannot leave a study under two passwords. Every command with a wrong password
+stops with the message "wrong password" and changes nothing.
+
+{pstd}
+Stata keeps its own temporary copies of datasets, for example when a command preserves the
+data in memory, and erases them when the command ends. After a crash or a power loss such a
+copy can remain in the folder shown by {cmd:display c(tmpdir)}. Only the study folder is
+guaranteed to hold no plain dataset. Install {cmd:pyzipper} as described in {help encsave}.
 
 
 {title:Examples}

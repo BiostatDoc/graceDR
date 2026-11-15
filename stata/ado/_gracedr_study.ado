@@ -2,6 +2,7 @@ program define _gracedr_study
     version 19
     gettoken subcommand 0 : 0, parse(" ,")
     local known read write exists folder setting check_id reserved_id append_audit empty
+    local known `known' has extension
     local is_known : list subcommand in known
     if `is_known' == 0 | missing("`subcommand'") {
         display as error "gracedr: unknown study subcommand `subcommand'"
@@ -63,9 +64,45 @@ program define _gracedr_study_checkname
     }
 end
 
+program define _gracedr_study_kind, rclass
+    args folder requested
+    local encrypted = 0
+    foreach name in design participants codes audit state {
+        if fileexists(`"`macval(folder)'/`name'.zip"') == 1 {
+            local encrypted = 1
+        }
+    }
+    if "`requested'" == "1" {
+        local encrypted = 1
+    }
+    return scalar encrypted = `encrypted'
+    return local extension = cond(`encrypted' == 1, "zip", "dta")
+end
+
+program define _gracedr_study_extension, rclass
+    syntax , STUDY(string)
+    _gracedr_study_folder, study(`"`macval(study)'"')
+    mata: st_local("folder", st_global("r(folder)"))
+    _gracedr_study_kind "`macval(folder)'" 0
+    return scalar encrypted = r(encrypted)
+    return local extension "`r(extension)'"
+end
+
+program define _gracedr_study_has, rclass
+    syntax , STUDY(string) NAME(string)
+    _gracedr_study_checkname "`macval(name)'"
+    _gracedr_study_folder, study(`"`macval(study)'"')
+    mata: st_local("folder", st_global("r(folder)"))
+    _gracedr_study_kind "`macval(folder)'" 0
+    local file `"`macval(folder)'/`macval(name)'.`r(extension)'"'
+    return scalar has = fileexists(`"`macval(file)'"')
+end
+
 program define _gracedr_study_require
     args folder shown
-    if fileexists("`macval(folder)'/design.dta") == 0 {
+    local plain_found = fileexists("`macval(folder)'/design.dta")
+    local zipped_found = fileexists("`macval(folder)'/design.zip")
+    if max(`plain_found', `zipped_found') == 0 {
         display as error `"gracedr: no study found in `macval(shown)'"'
         exit 601
     }
@@ -75,7 +112,9 @@ program define _gracedr_study_exists, rclass
     syntax , STUDY(string)
     _gracedr_study_folder, study(`"`macval(study)'"')
     mata: st_local("folder", st_global("r(folder)"))
-    return scalar exists = fileexists(`"`macval(folder)'/design.dta"')
+    local plain_found = fileexists(`"`macval(folder)'/design.dta"')
+    local zipped_found = fileexists(`"`macval(folder)'/design.zip"')
+    return scalar exists = max(`plain_found', `zipped_found')
 end
 
 program define _gracedr_study_setting, rclass
@@ -91,7 +130,7 @@ program define _gracedr_study_setting, rclass
     mata: st_local("folder", st_global("r(folder)"))
     _gracedr_study_require "`macval(folder)'" "`macval(study)'"
     preserve
-    quietly use "`macval(folder)'/design.dta", clear
+    quietly _gracedr_study_read, study(`"`macval(study)'"') name(design)
     capture confirm variable name value
     local intact = _rc == 0
     if `intact' == 0 {
@@ -120,15 +159,23 @@ program define _gracedr_study_read
     _gracedr_study_folder, study(`"`macval(study)'"')
     mata: st_local("folder", st_global("r(folder)"))
     _gracedr_study_require "`macval(folder)'" "`macval(study)'"
-    if fileexists("`macval(folder)'/`macval(name)'.dta") == 0 {
-        display as error `"gracedr: `macval(name)'.dta is missing from `macval(study)'"'
+    _gracedr_study_kind "`macval(folder)'" 0
+    local extension "`r(extension)'"
+    local file "`macval(folder)'/`macval(name)'.`extension'"
+    if fileexists("`macval(file)'") == 0 {
+        display as error `"gracedr: `macval(name)'.`extension' is missing from `macval(study)'"'
         exit 601
     }
-    use "`macval(folder)'/`macval(name)'.dta", clear
+    if "`extension'" == "zip" {
+        encuse using "`macval(file)'", clear session
+    }
+    else {
+        use "`macval(file)'", clear
+    }
 end
 
 program define _gracedr_study_write
-    syntax , STUDY(string) NAME(string)
+    syntax , STUDY(string) NAME(string) [ENCRYPT]
     _gracedr_study_checkname "`macval(name)'"
     _gracedr_study_folder, study(`"`macval(study)'"')
     mata: st_local("folder", st_global("r(folder)"))
@@ -136,10 +183,21 @@ program define _gracedr_study_write
         display as error `"gracedr: study folder `macval(study)' does not exist"'
         exit 601
     }
-    local current "`macval(folder)'/`macval(name)'.dta"
+    local requested = cond("`encrypt'" == "", 0, 1)
+    _gracedr_study_kind "`macval(folder)'" `requested'
+    local extension "`r(extension)'"
+    local current "`macval(folder)'/`macval(name)'.`extension'"
     local pending "`macval(folder)'/`macval(name)'.tmp"
     local backup "`macval(folder)'/`macval(name)'.bak"
-    capture quietly save "`macval(pending)'", replace
+    if "`extension'" == "zip" {
+        local pending "`macval(folder)'/`macval(name)'.tmp.zip"
+        local backup "`macval(folder)'/`macval(name)'.bak.zip"
+        _gracedr_study_verify, current("`macval(current)'")
+        capture noisily encsave using "`macval(pending)'", replace session
+    }
+    else {
+        capture quietly save "`macval(pending)'", replace
+    }
     if _rc == 0 {
         if fileexists("`macval(current)'") == 1 {
             copy "`macval(current)'" "`macval(backup)'", replace
@@ -150,7 +208,23 @@ program define _gracedr_study_write
     else {
         local failure = _rc
         capture erase "`macval(pending)'"
-        display as error `"gracedr: could not write `macval(name)'.dta in `macval(study)'"'
+        display as error `"gracedr: could not write `macval(name)'.`extension' in `macval(study)'"'
+        exit `failure'
+    }
+end
+
+program define _gracedr_study_verify
+    syntax , CURRENT(string)
+    if fileexists("`macval(current)'") == 0 {
+        exit
+    }
+    tempfile held
+    quietly save `"`held'"'
+    capture noisily encuse using "`macval(current)'", clear session
+    local failure = _rc
+    local verified = `failure' == 0
+    quietly use `"`held'"', clear
+    if `verified' == 0 {
         exit `failure'
     }
 end
@@ -230,7 +304,8 @@ program define _gracedr_study_append_audit
     _gracedr_utc
     local stamp = r(time)
     preserve
-    if fileexists("`macval(folder)'/audit.dta") == 1 {
+    _gracedr_study_has, study(`"`macval(study)'"') name(audit)
+    if r(has) == 1 {
         _gracedr_study_read, study(`"`macval(study)'"') name(audit)
     }
     else {

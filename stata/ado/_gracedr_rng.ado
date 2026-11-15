@@ -30,9 +30,8 @@ program define _gracedr_rng_init
         display as error `"gracedr: no study found in `macval(study)'"'
         exit 601
     }
-    _gracedr_study folder, study(`"`macval(study)'"')
-    mata: st_local("folder", st_global("r(folder)"))
-    if fileexists("`macval(folder)'/state.dta") == 1 {
+    _gracedr_study has, study(`"`macval(study)'"') name(state)
+    if r(has) == 1 {
         display as error `"gracedr: state.dta already exists in `macval(study)'"'
         exit 602
     }

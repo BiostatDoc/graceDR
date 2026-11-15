@@ -8,7 +8,7 @@
 {title:Syntax}
 
 {p 8 17 2}
-{cmd:encuse} {cmd:using} {it:filename} [{cmd:,} {opt clear}]
+{cmd:encuse} {cmd:using} {it:filename} [{cmd:,} {opt clear} {opt session}]
 
 
 {title:Description}
@@ -34,6 +34,12 @@ Stata uses and {cmd:set python_exec} to change it.
 
 {phang}
 {opt clear} replaces the dataset in memory, even if it has unsaved changes.
+
+{phang}
+{opt session} remembers a password typed in the pop-up until Stata closes, so that later calls
+with {opt session} do not ask again. A wrong password is forgotten, so the next call asks
+again. The password stays in Python's memory only. The {cmd:gracedr} commands use it for
+encrypted studies. Without it, every call asks.
 
 
 {title:Examples}

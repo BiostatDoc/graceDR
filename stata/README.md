@@ -111,3 +111,17 @@ loads one. They are independent of the `gracedr` commands. The code is in `ado/e
 `pyzipper`. The password comes from the environment variable `GRACEDR_PASSPHRASE`, or from a masked
 pop-up. There is no `password()` option. `cert/certify_zip.do` certifies the round trip, a wrong
 password, leftover files, a missing `pyzipper` and that the password stays out of the log.
+
+## Encrypted studies
+
+`gracedr setup, ..., encrypt` stores `design`, `participants`, `codes`, `audit` and `state` as
+AES-256 zips (`design.zip` and so on) written by `encsave`. Every other `gracedr` command treats a
+folder that holds any of those zips as an encrypted study, so it needs no option. A write goes to `<name>.tmp.zip`,
+keeps the current file as `<name>.bak.zip` and then replaces it, and it is refused unless the
+password opens the current file. The password comes from `GRACEDR_PASSPHRASE`, or from one pop-up
+per study folder and Stata session whose answer only Python's memory keeps (the `session` option of `encsave` and
+`encuse`). Stata's own temporary copies, such as `preserve` files in `c(tmpdir)`, are plain and are
+erased when a command ends, so a crash can leave one there. `cert/certify_encrypted.do` runs the
+`certify_randomize.do` sequence on an encrypted study, then certifies the reference arms, that
+only zip files are left in the study folder after an error, that a wrong password stops every
+command and changes nothing, and that the pop-up is asked once.

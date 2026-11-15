@@ -9,6 +9,8 @@ from dataclasses import dataclass
 PASSPHRASE_VARIABLE = "GRACEDR_PASSPHRASE"
 MEMBER_NAME = "data.dta"
 
+session_passphrases: dict[str, bytes] = {}
+
 
 class PassphraseUnavailable(Exception):
     pass
@@ -20,11 +22,26 @@ class Failure:
     lines: tuple[str, ...]
 
 
-def read_passphrase(confirm: bool) -> bytes:
+def session_key(archive_path: str) -> str:
+    return os.path.normcase(os.path.dirname(os.path.abspath(archive_path)))
+
+
+def read_passphrase(confirm: bool, session: bool, archive_path: str) -> bytes:
     value = os.environ.get(PASSPHRASE_VARIABLE, "")
     if value:
         return value.encode("utf-8")
-    return prompt_passphrase(confirm)
+    key = session_key(archive_path)
+    if session and key in session_passphrases:
+        return session_passphrases[key]
+    typed = prompt_passphrase(confirm)
+    if session:
+        session_passphrases[key] = typed
+    return typed
+
+
+def forget_session_passphrase(archive_path: str) -> None:
+    if not os.environ.get(PASSPHRASE_VARIABLE, ""):
+        session_passphrases.pop(session_key(archive_path), None)
 
 
 def prompt_passphrase(confirm: bool) -> bytes:
@@ -117,7 +134,13 @@ def not_an_archive(command: str, archive_path: str) -> Failure:
     )
 
 
-def run(command: str, action: str, archive_path: str, plain_path: str) -> Failure | None:
+def run(
+    command: str,
+    action: str,
+    archive_path: str,
+    plain_path: str,
+    session: bool = False,
+) -> Failure | None:
     try:
         pyzipper = importlib.import_module("pyzipper")
     except ImportError as error:
@@ -126,7 +149,11 @@ def run(command: str, action: str, archive_path: str, plain_path: str) -> Failur
     try:
         if action == "load" and not os.path.exists(archive_path):
             raise FileNotFoundError(archive_path)
-        passphrase = read_passphrase(confirm=action == "save")
+        passphrase = read_passphrase(
+            confirm=action == "save",
+            session=session,
+            archive_path=archive_path,
+        )
         if action == "save":
             save_archive(plain_path, archive_path, passphrase)
         else:
@@ -134,6 +161,8 @@ def run(command: str, action: str, archive_path: str, plain_path: str) -> Failur
     except bad_archive:
         return not_an_archive(command, archive_path)
     except (PassphraseUnavailable, RuntimeError, OSError) as error:
+        if isinstance(error, (RuntimeError, PassphraseUnavailable)):
+            forget_session_passphrase(archive_path)
         return failure_for(command, error, archive_path)
     return None
 
@@ -146,6 +175,7 @@ def run_from_stata(command: str, action: str) -> None:
         action,
         Macro.getLocal("archive"),
         Macro.getLocal("plain"),
+        Macro.getLocal("session") == "1",
     )
     if failure is None:
         Macro.setLocal("zipcode", "0")
