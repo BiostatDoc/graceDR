@@ -79,11 +79,12 @@ Arm labels and levels must not contain double quotes, backticks or dollar signs.
 {title:Examples}
 
 {pstd}
-Run an example once. To run it again, delete the study folder first.
+Run an example once. To run it again, delete the study folder first. The first example uses
+the example codes file, which {cmd:net get gracedr} copies into the current folder.
 
 {phang2}{cmd:. gracedr setup, study("`c(tmpdir)'/my study") n(40) arms(A B)}
 {cmd:categorical(sex: male female | race: white black other) continuous(age)}
-{cmd:codes("stata/data/example_codes.csv") seed(20260611)}{p_end}
+{cmd:codes("example_codes.csv") seed(20260611)}{p_end}
 
 {phang2}{cmd:. gracedr setup, study("`c(tmpdir)'/three arms") n(90) arms(A B C)}
 {cmd:ratio(2 1 1) categorical(sex: male female) runin(0)}{p_end}

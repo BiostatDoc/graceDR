@@ -1,0 +1,58 @@
+v 3
+d gracedr - Group-adaptive randomization with a study folder
+d
+d gracedr is the Stata version of graceDR. It defines a study in a folder, randomizes
+d participants one at a time with the modified minimal sufficient balance method,
+d reports balance, keeps an audit log, and simulates trials under several methods.
+d
+d Requires Stata 19.
+d Distribution-Date: 20261115
+d
+d Example files: type net get gracedr to copy them to the current folder.
+d
+f ado/_gracedr_balance.ado
+f ado/_gracedr_codepool.ado
+f ado/_gracedr_codes.ado
+f ado/_gracedr_core.ado
+f ado/_gracedr_core.mata
+f ado/_gracedr_design.ado
+f ado/_gracedr_filters.ado
+f ado/_gracedr_generate.ado
+f ado/_gracedr_generate.mata
+f ado/_gracedr_graphs.ado
+f ado/_gracedr_metrics.ado
+f ado/_gracedr_metrics.mata
+f ado/_gracedr_mmsb.ado
+f ado/_gracedr_replay.ado
+f ado/_gracedr_rng.ado
+f ado/_gracedr_rules.ado
+f ado/_gracedr_save.ado
+f ado/_gracedr_settings.ado
+f ado/_gracedr_simulate.mata
+f ado/_gracedr_smd.ado
+f ado/_gracedr_study.ado
+f ado/_gracedr_tables.ado
+f ado/_gracedr_utc.ado
+f ado/_gracedr_values.ado
+f ado/_gracedr_votes.ado
+f ado/gracedr.ado
+f ado/gracedr_audit.ado
+f ado/gracedr_codes.ado
+f ado/gracedr_override.ado
+f ado/gracedr_randomize.ado
+f ado/gracedr_replay.ado
+f ado/gracedr_setup.ado
+f ado/gracedr_simulate.ado
+f ado/gracedr_status.ado
+f help/gracedr.sthlp
+f help/gracedr_audit.sthlp
+f help/gracedr_codes.sthlp
+f help/gracedr_override.sthlp
+f help/gracedr_randomize.sthlp
+f help/gracedr_replay.sthlp
+f help/gracedr_setup.sthlp
+f help/gracedr_simulate.sthlp
+f help/gracedr_status.sthlp
+f data/example_codes.csv
+f data/example_codes.dta
+f data/example_participants.dta
