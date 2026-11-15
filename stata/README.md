@@ -4,7 +4,8 @@ This folder holds the Stata 19 version of graceDR. The design is in
 `docs/superpowers/specs/2026-11-13-stata-addition-design.md`. Right now it holds the
 checks that run the certification scripts, the study folder helpers, and the commands
 `gracedr setup`, `gracedr codes`, `gracedr randomize`, `gracedr status`, `gracedr override`,
-`gracedr audit`, `gracedr replay` and `gracedr simulate`. Later cards add the rest.
+`gracedr audit`, `gracedr replay` and `gracedr simulate`, and the encryption utility
+`encsave` and `encuse`. Later cards add the rest.
 
 ## Requirements
 
@@ -13,7 +14,8 @@ checks that run the certification scripts, the study folder helpers, and the com
 - `make` and `bash` (Git for Windows provides both).
 - The `stata_linter` package (`ssc install stata_linter`), Python, and the Python package
   `pandas`.
-- Later cards add the Python package `pyzipper` for the encryption utility.
+- The Python package `pyzipper`, installed in the Python that Stata uses (`python query` shows it),
+  for the encryption utility.
 
 ## Checks
 
@@ -85,3 +87,12 @@ the Windows PowerShell under `SYSTEMROOT`, because Stata has only local time. Bo
 repository and on every push to `main`. GitHub's hosted runners have no Stata license, so the jobs
 run on a self-hosted Windows runner with the requirements above. Pull requests from forks are
 skipped so that outside code never runs on that machine.
+
+## Encryption utility
+
+`encsave using <file>` saves the dataset in memory to an AES-256 zip, and `encuse using <file>`
+loads one. They are independent of the `gracedr` commands. The code is in `ado/encsave.ado`,
+`ado/encuse.ado` and `python/gracedr_zip.py`, which uses Stata's Python integration and the package
+`pyzipper`. The password comes from the environment variable `GRACEDR_PASSPHRASE`, or from a masked
+pop-up. There is no `password()` option. `cert/certify_zip.do` certifies the round trip, a wrong
+password, leftover files, a missing `pyzipper` and that the password stays out of the log.
