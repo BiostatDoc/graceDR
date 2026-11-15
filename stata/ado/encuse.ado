@@ -8,14 +8,11 @@ program define encuse
     if "`clear'" == "" & c(changed) == 1 {
         error 4
     }
-    quietly findfile encuse.ado
-    local backslash = char(92)
-    local ado_file = subinstr(`"`r(fn)'"', "`backslash'", "/", .)
-    local folder = substr("`ado_file'", 1, strlen("`ado_file'") - strlen("encuse.ado") - 1)
-    local sibling "`folder'/../python"
+    _gracedr_zip_folder
+    local module_folder `r(folder)'
     local archive `"`macval(using)'"'
     tempfile plain
-    python: import sys; sys.path[:0] = [r"`folder'", r"`sibling'"]
+    python: import sys; sys.path[:0] = [r"`module_folder'"]
     capture noisily python: import gracedr_zip; gracedr_zip.run_from_stata("encuse", "load")
     local python_rc = _rc
     if "`zipcode'" == "" {

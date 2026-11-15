@@ -12,17 +12,14 @@ program define encsave
             exit 602
         }
     }
-    quietly findfile encsave.ado
-    local backslash = char(92)
-    local ado_file = subinstr(`"`r(fn)'"', "`backslash'", "/", .)
-    local folder = substr("`ado_file'", 1, strlen("`ado_file'") - strlen("encsave.ado") - 1)
-    local sibling "`folder'/../python"
+    _gracedr_zip_folder
+    local module_folder `r(folder)'
     local archive `"`macval(using)'"'
     tempfile plain
     preserve
     quietly save `"`plain'"'
     restore
-    python: import sys; sys.path[:0] = [r"`folder'", r"`sibling'"]
+    python: import sys; sys.path[:0] = [r"`module_folder'"]
     capture noisily python: import gracedr_zip; gracedr_zip.run_from_stata("encsave", "save")
     local python_rc = _rc
     capture erase `"`plain'"'
