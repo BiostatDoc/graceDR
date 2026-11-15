@@ -11,6 +11,9 @@ lives in the public repository `BiostatDoc/graceDR`.
 The package is named `graceDR`, not `grace` as in the specification, because the name `grace`
 conflicts with an archived CRAN package named Grace.
 
+A Stata 19 version of the package, the command `gracedr`, is under way in the same repository. It
+is described in the section "The Stata version".
+
 ## What the package does
 
 The package modifies the minimal sufficient balance (MSB) algorithm of Zhao, Hill, and Palesch
@@ -139,6 +142,79 @@ passphrase for the encrypted file. The program produces nothing for blinded staf
 - Several people randomizing at once, and file locking.
 - Blinded exports and blinded reports.
 
+## The Stata version
+
+The package is also being built for Stata 19 as the command `gracedr`, in the `stata` folder of
+the same repository. It follows the same method and the same workflow as the R package, in a
+Stata idiom. It runs on Windows only, and its design is in
+`docs/superpowers/specs/2026-11-13-stata-addition-design.md`.
+
+### Commands and study folder
+
+Every command is a subcommand of `gracedr` and takes `study(folder)`, the one folder that holds
+the study. The folder holds `design.dta` (the study definition), `participants.dta` (one row
+per participant, in enrollment order), `codes.dta` (treatment codes and their status),
+`audit.dta` (the append-only audit log), and `state.dta` (the current random-number state).
+A trial can be stopped and picked up later by pointing the commands at its folder.
+
+| Subcommand | What it does |
+|:--|:--|
+| `gracedr setup` | Defines a study and creates its files |
+| `gracedr codes` | Checks and loads a treatment codes file |
+| `gracedr randomize` | Assigns one participant, with one option per balance variable |
+| `gracedr status` | Group sizes, balance table, and graphs, with the same filters as R |
+| `gracedr override` | Changes one assignment and records a required reason |
+| `gracedr audit` | Lists the audit log |
+| `gracedr replay` | Redoes a past draw and reports whether it matches |
+| `gracedr simulate` | Simulates trials under the five allocation methods |
+
+An override marks the old treatment code `voided`, and a voided code is never reused. Graphs
+are drawn only when the user asks for them. Simulation runs one trial at a time, reads only
+`design.dta`, and writes nothing to the study folder. Each Stata file keeps to one subject:
+one ado-file per subcommand, with the numerical code in Mata files.
+
+### Random numbers and replay
+
+Like the R package, each Stata trial keeps its own random-number stream. A command saves the
+user's state, installs the trial's state, draws, stores the new state in the study files, and
+restores the user's state. Each participant row stores the state in force before the draw, so
+`gracedr replay` can redo any draw. A draw takes one uniform number for the arm and, when
+treatment codes are used, a second from the same state for the treatment code, so one stored
+state reproduces both. The new state is saved last, after the other files are written.
+
+### Checks
+
+Stata cannot run on GitHub's hosted runners because it needs a license. A self-hosted Windows
+runner runs the Stata checks on every pull request from the repository and on every change to
+`main`. `make -C stata pre-pr` runs three steps:
+
+- `format` replaces tabs and removes trailing spaces;
+- `lint` runs `stata_linter` on every ado-file and do-file;
+- `test` runs the certification do-files in `stata/cert` under Stata 19 in batch mode.
+
+The root `make pre-pr` runs the R checks and then the Stata checks, so it fails on a machine
+without Stata. The certification checks that a fixed seed gives the same results on repeated
+runs, that group sizes are exact at the forced totals, that probabilities stay within bounds,
+that an override is logged and its code voided, that replaying every logged assignment gives the
+same arm, and that each error case stops with its message. Each language is only expected to
+match its own results across machines. The Stata certification does not use R output.
+
+### Encrypted datasets
+
+Stata has no encrypted files, so the plan adds a separate command pair, built on the Python
+package `pyzipper`, that saves a dataset as an AES-256 zip file and loads it again. It does
+not know about randomization. A study can be chosen at setup to be encrypted, in which case
+every dataset in its folder is an encrypted zip. The passphrase comes from the environment
+variable `GRACEDR_PASSPHRASE` or a masked pop-up, never from a command option, so it never
+reaches the log.
+
+### Still to come
+
+The encrypted datasets, the installable package files, a Stata Journal article, and its
+replication package are not finished. The article has Grace Huiyi Ma as first author and
+Dr. Hardin as corresponding author, and it includes the development of saving and using
+encrypted Stata datasets.
+
 ## How the work was managed
 
 ### From specification to pull requests
@@ -169,6 +245,10 @@ every change to `main`:
 - `lint` checks the formatting with `styler` and runs `lintr`;
 - `test` runs the `testthat` tests;
 - `check` runs `R CMD check` with warnings treated as errors, on Linux and Windows.
+
+The Stata work adds two jobs, `stata-lint` and `stata-test`, which run on a self-hosted Windows
+runner because Stata needs a license. They run only for pull requests from the repository itself,
+so code from a fork never runs on that machine.
 
 The repository allows only squash merges and deletes each branch after it merges. A ruleset named
 "Protect main" blocks deleting `main` and force pushes, requires a pull request, and requires the
@@ -247,6 +327,11 @@ settings (200 or 500 participants, with and without drift in the enrolled popula
 So the modifications deliver exact group sizes at chosen totals with less predictability than
 permuted blocks, at a small cost in balance relative to MSB. They do not give better balance than
 minimization in these simulations.
+
+The Stata version has the commands `gracedr setup`, `codes`, `randomize`, `status`, `override`,
+`audit`, `replay`, and `simulate`, each with a help file and a certification do-file. The
+encrypted datasets, the installable package files, the Stata Journal article, and its replication
+package remain to be done.
 
 ## References
 
