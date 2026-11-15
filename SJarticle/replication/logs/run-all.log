@@ -1,0 +1,1415 @@
+. do "00-setup.do"
+
+. version 19
+
+. clear all
+
+. set more off
+
+. set linesize 80
+
+. 
+. global cells N200_iid N200_drift N500_iid N500_drift
+
+. global methods srs blocks minimization msb mmsb
+
+. global nsims 1000
+
+. global seed 20260611
+
+. 
+. local source : environment GRACEDR_SOURCE
+
+. if "`source'" == "" {
+.     local source "https://raw.githubusercontent.com/BiostatDoc/graceDR/main/st
+> ata"
+. }
+
+. quietly net install gracedr, from("`source'") replace
+
+. 
+. local home "`c(pwd)'"
+
+. foreach folder in data results figures studies {
+  2.     capture mkdir `folder'
+  3. }
+
+. quietly cd data
+
+. quietly net get gracedr, from("`source'") replace
+
+. quietly cd "`home'"
+
+. 
+. quietly findfile gracedr.ado
+
+. local plus = lower(subinstr("`c(sysdir_plus)'", char(92), "/", .))
+
+. local installed = strpos(lower("`r(fn)'"), "`plus'") == 1
+
+. if `installed' == 0 {
+.     display as error "gracedr.ado was found outside the PLUS folder: `r(fn)'"
+.     display as error "Remove that copy so that the installed package is the on
+> e that runs."
+.     exit 459
+. }
+
+. 
+. python:
+----------------------------------------------- python (type end to exit) ------
+>>> import subprocess
+>>> import sys
+>>> 
+>>> try:
+...     import pyzipper
+... except ImportError:
+...     subprocess.check_call([sys.executable, "-m", "pip", "install", "pyzipper
+> "])
+...     import pyzipper
+>>> end
+--------------------------------------------------------------------------------
+
+. 
+. display "Stata " c(stata_version) ", " c(os) ", " c(machine_type)
+Stata 19.5, Windows, PC (64-bit x86-64)
+
+. display "The gracedr package is installed and its example files are in data/"
+The gracedr package is installed and its example files are in data/
+
+. 
+end of do-file
+
+. do "helpers.do"
+
+. version 19
+
+. 
+. capture program drop remove_folder
+
+. program define remove_folder
+  1.     args folder
+  2.     mata: st_local("found", strofreal(direxists(st_local("folder"))))
+  3.     if `found' == 1 {
+  4.         local files : dir "`folder'" files "*"
+  5.         foreach file of local files {
+  6.             quietly erase "`folder'/`file'"
+  7.         }
+  8.         quietly rmdir "`folder'"
+  9.     }
+ 10. end
+
+. 
+. capture program drop show_table
+
+. program define show_table
+  1.     syntax varlist, TITLE(string)
+  2.     display
+  3.     display as text "`title'"
+  4.     list `varlist', noobs separator(0) abbreviate(30)
+  5. end
+
+. 
+. capture program drop use_study_participants
+
+. program define use_study_participants
+  1.     args study
+  2.     capture confirm file "`study'/participants.dta"
+  3.     if _rc == 0 {
+  4.         use "`study'/participants.dta", clear
+  5.     }
+  6.     else {
+  7.         encuse using "`study'/participants", clear
+  8.     }
+  9. end
+
+. 
+end of do-file
+
+. do "01-simulate.do"
+
+. version 19
+
+. clear
+
+. 
+. local design "arms(A B) categorical(sex: male female | race: white black other
+> )"
+
+. local design "`design' continuous(age)"
+
+. local iid "generator(iid) probs(sex: 0.48 0.52 | race: 0.62 0.23 0.15)"
+
+. local iid "`iid' meansd(age: 60 10)"
+
+. local drift "generator(drift) probs(sex: 0.20 0.80 | race: 0.77 0.08 0.15)"
+
+. local drift "`drift' meansd(age: 48 8)"
+
+. local drift "`drift' driftto(sex: 0.80 0.20 | race: 0.37 0.48 0.15 | age: 72 8
+> )"
+
+. 
+. foreach size of numlist 200 500 {
+  2.     foreach scenario in iid drift {
+  3.         local cell "N`size'_`scenario'"
+  4.         display as text "Running `cell'"
+  5.         quietly gracedr simulate, ///
+>             n(`size') ///
+>             `design' ///
+>             ``scenario'' ///
+>             methods(${methods}) ///
+>             nsims(${nsims}) ///
+>             seed(${seed}) ///
+>             saving("results/sim_`cell'.dta") ///
+>             summary("results/summary_`cell'.dta")
+  6.         display as text "Finished `cell': " r(nsims) " simulations of " r(m
+> ethods)
+  7.     }
+  8. }
+Running N200_iid
+Finished N200_iid: 1000 simulations of srs blocks minimization msb mmsb
+Running N200_drift
+Finished N200_drift: 1000 simulations of srs blocks minimization msb mmsb
+Running N500_iid
+Finished N500_iid: 1000 simulations of srs blocks minimization msb mmsb
+Running N500_drift
+Finished N500_drift: 1000 simulations of srs blocks minimization msb mmsb
+
+. 
+end of do-file
+
+. do "02-summarize.do"
+
+. version 19
+
+. clear
+
+. 
+. capture program drop cell_stats
+
+. program define cell_stats
+  1.     args cell position
+  2.     use "results/summary_`cell'.dta", clear
+  3.     generate str12 key = ""
+  4.     replace key = "smd_end" if point == "end" & metric == "smd_max"
+  5.     replace key = "smd_runin" if point == "run-in" & metric == "smd_max"
+  6.     replace key = "guess" if point == "all" & metric == "correct_guess"
+  7.     replace key = "forced" if point == "all" & metric == "pct_deterministic
+> "
+  8.     replace key = "run" if point == "all" & metric == "longest_forced_run"
+  9.     replace key = "dev_end" if point == "end" & metric == "size_dev_A"
+ 10.     keep if !missing(key)
+ 11.     keep method key mean sd q95 max
+ 12.     reshape wide mean sd q95 max, i(method) j(key) string
+ 13.     foreach key in smd_end guess {
+ 14.         generate se`key' = sd`key' / sqrt(${nsims})
+ 15.     }
+ 16. 
+.     tempfile exact
+ 17.     preserve
+ 18.     use "results/sim_`cell'.dta", clear
+ 19.     keep if metric == "size_dev_A" & inlist(point, "run-in", "end")
+ 20.     generate byte exact = value == 0
+ 21.     collapse (mean) exact, by(method point)
+ 22.     replace exact = 100 * exact
+ 23.     replace point = subinstr(point, "-", "", .)
+ 24.     reshape wide exact, i(method) j(point) string
+ 25.     quietly save `"`exact'"'
+ 26.     restore
+ 27.     merge 1:1 method using `"`exact'"', assert(match) nogenerate
+ 28. 
+.     generate str16 cell = "`cell'"
+ 29.     generate byte cellno = `position'
+ 30.     quietly save "results/stats_`cell'.dta", replace
+ 31. end
+
+. 
+. capture program drop cell_paired
+
+. program define cell_paired
+  1.     args cell
+  2.     use "results/sim_`cell'.dta", clear
+  3.     keep if (point == "end" & metric == "smd_max") | ///
+>         (point == "all" & metric == "correct_guess")
+  4.     generate str5 key = cond(metric == "smd_max", "smd", "guess")
+  5.     keep sim method key value
+  6.     reshape wide value, i(sim key) j(method) string
+  7. 
+.     tempname handle
+  8.     tempfile paired
+  9.     postfile `handle' str16 cell str12 method str5 key double(mean lower up
+> per) ///
+>         using `"`paired'"'
+ 10.     foreach method in srs blocks minimization msb {
+ 11.         foreach key in smd guess {
+ 12.             quietly generate double difference = value`method' - valuemmsb 
+> if key == "`key'"
+ 13.             quietly summarize difference
+ 14.             local estimate = r(mean)
+ 15.             local error = r(sd) / sqrt(r(N))
+ 16.             post `handle' ("`cell'") ("`method'") ("`key'") (`estimate') //
+> /
+>                 (`estimate' - 1.96 * `error') (`estimate' + 1.96 * `error')
+ 17.             drop difference
+ 18.         }
+ 19.     }
+ 20.     postclose `handle'
+ 21.     use `"`paired'"', clear
+ 22.     quietly save "results/paired_`cell'.dta", replace
+ 23. end
+
+. 
+. local position = 0
+
+. foreach cell of global cells {
+  2.     local position = `position' + 1
+  3.     cell_stats `cell' `position'
+  4.     cell_paired `cell'
+  5. }
+(75 missing values generated)
+(5 real changes made)
+(5 real changes made)
+(5 real changes made)
+(5 real changes made)
+(5 real changes made)
+(5 real changes made)
+(45 observations deleted)
+(j = dev_end forced guess run smd_end smd_runin)
+
+Data                               Long   ->   Wide
+-----------------------------------------------------------------------------
+Number of observations               30   ->   5           
+Number of variables                   6   ->   25          
+j variable (6 values)               key   ->   (dropped)
+xij variables:
+                                   mean   ->   meandev_end meanforced ... meansm
+> d_runin
+                                     sd   ->   sddev_end sdforced ... sdsmd_runi
+> n
+                                    q95   ->   q95dev_end q95forced ... q95smd_r
+> unin
+                                    max   ->   maxdev_end maxforced ... maxsmd_r
+> unin
+-----------------------------------------------------------------------------
+(65,000 observations deleted)
+(10 real changes made)
+(5 real changes made)
+(j = end runin)
+
+Data                               Long   ->   Wide
+-----------------------------------------------------------------------------
+Number of observations               10   ->   5           
+Number of variables                   3   ->   3           
+j variable (2 values)             point   ->   (dropped)
+xij variables:
+                                  exact   ->   exactend exactrunin
+-----------------------------------------------------------------------------
+
+    Result                      Number of obs
+    -----------------------------------------
+    Not matched                             0
+    Matched                                 5  
+    -----------------------------------------
+(65,000 observations deleted)
+(j = blocks minimization mmsb msb srs)
+
+Data                               Long   ->   Wide
+-----------------------------------------------------------------------------
+Number of observations           10,000   ->   2,000       
+Number of variables                   4   ->   7           
+j variable (5 values)            method   ->   (dropped)
+xij variables:
+                                  value   ->   valueblocks valueminimization ...
+>  valuesrs
+-----------------------------------------------------------------------------
+(75 missing values generated)
+(5 real changes made)
+(5 real changes made)
+(5 real changes made)
+(5 real changes made)
+(5 real changes made)
+(5 real changes made)
+(45 observations deleted)
+(j = dev_end forced guess run smd_end smd_runin)
+
+Data                               Long   ->   Wide
+-----------------------------------------------------------------------------
+Number of observations               30   ->   5           
+Number of variables                   6   ->   25          
+j variable (6 values)               key   ->   (dropped)
+xij variables:
+                                   mean   ->   meandev_end meanforced ... meansm
+> d_runin
+                                     sd   ->   sddev_end sdforced ... sdsmd_runi
+> n
+                                    q95   ->   q95dev_end q95forced ... q95smd_r
+> unin
+                                    max   ->   maxdev_end maxforced ... maxsmd_r
+> unin
+-----------------------------------------------------------------------------
+(65,000 observations deleted)
+(10 real changes made)
+(5 real changes made)
+(j = end runin)
+
+Data                               Long   ->   Wide
+-----------------------------------------------------------------------------
+Number of observations               10   ->   5           
+Number of variables                   3   ->   3           
+j variable (2 values)             point   ->   (dropped)
+xij variables:
+                                  exact   ->   exactend exactrunin
+-----------------------------------------------------------------------------
+
+    Result                      Number of obs
+    -----------------------------------------
+    Not matched                             0
+    Matched                                 5  
+    -----------------------------------------
+(65,000 observations deleted)
+(j = blocks minimization mmsb msb srs)
+
+Data                               Long   ->   Wide
+-----------------------------------------------------------------------------
+Number of observations           10,000   ->   2,000       
+Number of variables                   4   ->   7           
+j variable (5 values)            method   ->   (dropped)
+xij variables:
+                                  value   ->   valueblocks valueminimization ...
+>  valuesrs
+-----------------------------------------------------------------------------
+(75 missing values generated)
+(5 real changes made)
+(5 real changes made)
+(5 real changes made)
+(5 real changes made)
+(5 real changes made)
+(5 real changes made)
+(45 observations deleted)
+(j = dev_end forced guess run smd_end smd_runin)
+
+Data                               Long   ->   Wide
+-----------------------------------------------------------------------------
+Number of observations               30   ->   5           
+Number of variables                   6   ->   25          
+j variable (6 values)               key   ->   (dropped)
+xij variables:
+                                   mean   ->   meandev_end meanforced ... meansm
+> d_runin
+                                     sd   ->   sddev_end sdforced ... sdsmd_runi
+> n
+                                    q95   ->   q95dev_end q95forced ... q95smd_r
+> unin
+                                    max   ->   maxdev_end maxforced ... maxsmd_r
+> unin
+-----------------------------------------------------------------------------
+(65,000 observations deleted)
+(10 real changes made)
+(5 real changes made)
+(j = end runin)
+
+Data                               Long   ->   Wide
+-----------------------------------------------------------------------------
+Number of observations               10   ->   5           
+Number of variables                   3   ->   3           
+j variable (2 values)             point   ->   (dropped)
+xij variables:
+                                  exact   ->   exactend exactrunin
+-----------------------------------------------------------------------------
+
+    Result                      Number of obs
+    -----------------------------------------
+    Not matched                             0
+    Matched                                 5  
+    -----------------------------------------
+(65,000 observations deleted)
+(j = blocks minimization mmsb msb srs)
+
+Data                               Long   ->   Wide
+-----------------------------------------------------------------------------
+Number of observations           10,000   ->   2,000       
+Number of variables                   4   ->   7           
+j variable (5 values)            method   ->   (dropped)
+xij variables:
+                                  value   ->   valueblocks valueminimization ...
+>  valuesrs
+-----------------------------------------------------------------------------
+(75 missing values generated)
+(5 real changes made)
+(5 real changes made)
+(5 real changes made)
+(5 real changes made)
+(5 real changes made)
+(5 real changes made)
+(45 observations deleted)
+(j = dev_end forced guess run smd_end smd_runin)
+
+Data                               Long   ->   Wide
+-----------------------------------------------------------------------------
+Number of observations               30   ->   5           
+Number of variables                   6   ->   25          
+j variable (6 values)               key   ->   (dropped)
+xij variables:
+                                   mean   ->   meandev_end meanforced ... meansm
+> d_runin
+                                     sd   ->   sddev_end sdforced ... sdsmd_runi
+> n
+                                    q95   ->   q95dev_end q95forced ... q95smd_r
+> unin
+                                    max   ->   maxdev_end maxforced ... maxsmd_r
+> unin
+-----------------------------------------------------------------------------
+(65,000 observations deleted)
+(10 real changes made)
+(5 real changes made)
+(j = end runin)
+
+Data                               Long   ->   Wide
+-----------------------------------------------------------------------------
+Number of observations               10   ->   5           
+Number of variables                   3   ->   3           
+j variable (2 values)             point   ->   (dropped)
+xij variables:
+                                  exact   ->   exactend exactrunin
+-----------------------------------------------------------------------------
+
+    Result                      Number of obs
+    -----------------------------------------
+    Not matched                             0
+    Matched                                 5  
+    -----------------------------------------
+(65,000 observations deleted)
+(j = blocks minimization mmsb msb srs)
+
+Data                               Long   ->   Wide
+-----------------------------------------------------------------------------
+Number of observations           10,000   ->   2,000       
+Number of variables                   4   ->   7           
+j variable (5 values)            method   ->   (dropped)
+xij variables:
+                                  value   ->   valueblocks valueminimization ...
+>  valuesrs
+-----------------------------------------------------------------------------
+
+. 
+. clear
+
+. foreach cell of global cells {
+  2.     append using "results/stats_`cell'.dta"
+  3. }
+
+. generate byte methodno = (method == "srs") + 2 * (method == "blocks") ///
+>     + 3 * (method == "minimization") + 4 * (method == "msb") + 5 * (method == 
+> "mmsb")
+
+. generate str24 method_label = ""
+(20 missing values generated)
+
+. replace method_label = "Simple randomization" if method == "srs"
+(4 real changes made)
+
+. replace method_label = "Permuted blocks" if method == "blocks"
+(4 real changes made)
+
+. replace method_label = "Minimization" if method == "minimization"
+(4 real changes made)
+
+. replace method_label = "MSB" if method == "msb"
+(4 real changes made)
+
+. replace method_label = "Modified MSB" if method == "mmsb"
+(4 real changes made)
+
+. generate str16 setting = "N = " + substr(cell, 2, 3) + ", " + substr(cell, 6, 
+> .)
+
+. sort cellno methodno
+
+. quietly save "results/stats_all.dta", replace
+
+. 
+. clear
+
+. foreach cell of global cells {
+  2.     append using "results/paired_`cell'.dta"
+  3. }
+
+. quietly save "results/paired_all.dta", replace
+
+. display "Summaries saved in results/stats_all.dta and results/paired_all.dta"
+Summaries saved in results/stats_all.dta and results/paired_all.dta
+
+. 
+end of do-file
+
+. do "03-package-tables.do"
+
+. version 19
+
+. clear
+
+. set linesize 100
+
+. 
+. input str22 command str70 purpose
+
+                    command                                                                 purpose
+  1. "gracedr setup"      "Create a study folder from a design"
+  2. "gracedr codes"      "Check and load a file of treatment codes"
+  3. "gracedr randomize"  "Randomize one participant and save the record"
+  4. "gracedr status"     "Group sizes, balance tables, and graphs"
+  5. "gracedr override"   "Change an assignment with a recorded reason"
+  6. "gracedr audit"      "List the append-only audit log"
+  7. "gracedr replay"     "Redraw a past assignment and compare it with the record"
+  8. "gracedr simulate"   "Simulate trials under up to five allocation methods"
+  9. "encsave"            "Save the data in memory to an encrypted zip file"
+ 10. "encuse"             "Load the data from an encrypted zip file"
+ 11. end
+
+. show_table command purpose, title("Table: commands")
+
+Table: commands
+
+  +-----------------------------------------------------------------------------+
+  |           command                                                   purpose |
+  |-----------------------------------------------------------------------------|
+  |     gracedr setup                       Create a study folder from a design |
+  |     gracedr codes                  Check and load a file of treatment codes |
+  | gracedr randomize             Randomize one participant and save the record |
+  |    gracedr status                   Group sizes, balance tables, and graphs |
+  |  gracedr override               Change an assignment with a recorded reason |
+  |     gracedr audit                            List the append-only audit log |
+  |    gracedr replay   Redraw a past assignment and compare it with the record |
+  |  gracedr simulate       Simulate trials under up to five allocation methods |
+  |           encsave          Save the data in memory to an encrypted zip file |
+  |            encuse                  Load the data from an encrypted zip file |
+  +-----------------------------------------------------------------------------+
+
+. 
+. clear
+
+. input str14 option str10 default str64 meaning
+
+             option     default                                                           meaning
+  1. "n()"            "(required)"  "Total planned enrollment"
+  2. "arms()"         "(required)"  "Arm labels, at least two"
+  3. "categorical()"  "none"        "Categorical balance variables and their levels"
+  4. "continuous()"   "none"        "Continuous balance variables"
+  5. "ratio()"        "1 for all"   "Allocation ratio, any positive numbers"
+  6. "weights()"      "equal"       "Positive weights of the balance variables"
+  7. "pstar()"        "0.30"        "Imbalance probability limit"
+  8. "xi()"           "0.65"        "Biased coin probability"
+  9. "runin()"        "default"     "Run-in size; 0 removes the run-in"
+ 10. "runinmethod()"  "tilted"      "Run-in with the tilt, or the plain random allocation rule"
+ 11. "forcedat()"     "none"        "Enrollment totals at which the target counts are forced"
+ 12. "sizebound()"    "3"           "Big stick bound"
+ 13. "codes()"        "none"        "Treatment codes file with columns code and arm"
+ 14. "seed()"         "random"      "Seed of the random number generator"
+ 15. "encrypt"        "off"         "Store every dataset as an AES-256 encrypted zip"
+ 16. end
+
+. show_table option default meaning, title("Table: options of gracedr setup")
+
+Table: options of gracedr setup
+
+  +----------------------------------------------------------------------------------------+
+  |        option      default                                                     meaning |
+  |----------------------------------------------------------------------------------------|
+  |           n()   (required)                                    Total planned enrollment |
+  |        arms()   (required)                                    Arm labels, at least two |
+  | categorical()         none              Categorical balance variables and their levels |
+  |  continuous()         none                                Continuous balance variables |
+  |       ratio()    1 for all                      Allocation ratio, any positive numbers |
+  |     weights()        equal                   Positive weights of the balance variables |
+  |       pstar()         0.30                                 Imbalance probability limit |
+  |          xi()         0.65                                     Biased coin probability |
+  |       runin()      default                           Run-in size; 0 removes the run-in |
+  | runinmethod()       tilted   Run-in with the tilt, or the plain random allocation rule |
+  |    forcedat()         none     Enrollment totals at which the target counts are forced |
+  |   sizebound()            3                                             Big stick bound |
+  |       codes()         none              Treatment codes file with columns code and arm |
+  |        seed()       random                         Seed of the random number generator |
+  |       encrypt          off             Store every dataset as an AES-256 encrypted zip |
+  +----------------------------------------------------------------------------------------+
+
+. 
+end of do-file
+
+. do "04-package-demo.do"
+
+. version 19
+
+. clear
+
+. set linesize 80
+
+. 
+. local study "studies/example"
+
+. remove_folder "`study'"
+
+. 
+. gracedr setup, ///
+>     study("`study'") ///
+>     n(40) ///
+>     arms(A B) ///
+>     categorical(sex: male female | race: white black other) ///
+>     continuous(age) ///
+>     codes("data/example_codes.csv") ///
+>     seed(20260611)
+gracedr: 200 treatment codes are valid.
+  arm A: 100 codes
+  arm B: 100 codes
+(file studies/example/design.dta not found)
+(file studies/example/codes.dta not found)
+(file studies/example/participants.dta not found)
+(file studies/example/state.dta not found)
+(file studies/example/audit.dta not found)
+gracedr: study created in studies/example
+  40 participants planned, run-in 10, seed 20260611
+
+. 
+. use "data/example_participants.dta", clear
+
+. local total = _N
+
+. forvalues row = 1/`total' {
+  2.     local id = id[`row']
+  3.     local sex = sex[`row']
+  4.     local race = race[`row']
+  5.     local age = age[`row']
+  6.     if `row' < `total' {
+  7.         quietly gracedr randomize, study("`study'") id(`id') sex(`sex') rac
+> e(`race') age(`age')
+  8.     }
+  9.     else {
+ 10.         gracedr randomize, study("`study'") id(`id') sex(`sex') race(`race'
+> ) age(`age')
+ 11.     }
+ 12. }
+Participant P040 randomized to arm A
+Treatment code: 11394
+Group sizes
+Arm                        n     pct   Next target  Final target
+A                         20    50.0            20            20
+B                         20    50.0            20            20
+
+. local last_id "`r(id)'"
+
+. local last_arm "`r(arm)'"
+
+. 
+. gracedr status, study("`study'") graphs saving("figures/status")
+Study status: 40 participants randomized
+Group sizes
+Arm                        n     pct   Next target  Final target
+A                         20    50.0            20            20
+B                         20    50.0            20            20
+Balance by arm
+  arm1 = A
+  arm2 = B
+
+  +-----------------------------------------------------------------+
+  | variable    level          arm1         arm2   nmissing     smd |
+  |-----------------------------------------------------------------|
+  |      sex     male    13 (65.0%)   14 (70.0%)          0   0.107 |
+  |      sex   female     7 (35.0%)    6 (30.0%)          0   0.107 |
+  |     race    white    10 (50.0%)   14 (70.0%)          0   0.417 |
+  |     race    black     4 (20.0%)    3 (15.0%)          0   0.417 |
+  |     race    other     6 (30.0%)    3 (15.0%)          0   0.417 |
+  |      age            60.0 (13.0)   60.0 (8.9)          0   0.000 |
+  +-----------------------------------------------------------------+
+
+. graph export "figures/status-imbalance.pdf", name(gracedr_imbalance) replace
+file figures/status-imbalance.pdf saved as PDF format
+
+. graph export "figures/status-smd.pdf", name(gracedr_smd) replace
+file figures/status-smd.pdf saved as PDF format
+
+. 
+. local new_arm = cond("`last_arm'" == "A", "B", "A")
+
+. gracedr override, ///
+>     study("`study'") ///
+>     id(`last_id') ///
+>     arm(`new_arm') ///
+>     reason("Wrong race entered in the example.")
+Participant P040 changed from arm A to arm B
+Code 11394 voided, new code 71284
+
+. quietly gracedr audit, study("`study'")
+
+. display as text "Rows in the audit log: " r(rows)
+Rows in the audit log: 42
+
+. use "`study'/audit.dta", clear
+
+. list action id old new reason in -2/l, noobs separator(0) abbreviate(20)
+
+  +-------------------------------------------------------------------+
+  |    action     id   old   new                               reason |
+  |-------------------------------------------------------------------|
+  | randomize   P040           A                                      |
+  |  override   P040     A     B   Wrong race entered in the example. |
+  +-------------------------------------------------------------------+
+
+. use "data/example_participants.dta", clear
+
+. 
+. local matches = 0
+
+. forvalues row = 1/`total' {
+  2.     local id = id[`row']
+  3.     quietly gracedr replay, study("`study'") id(`id')
+  4.     local matches = `matches' + r(match)
+  5. }
+
+. display as text "Replays that match the record: `matches' of `total'"
+Replays that match the record: 40 of 40
+
+. 
+. gracedr simulate, ///
+>     n(40) ///
+>     arms(A B) ///
+>     categorical(sex: male female | race: white black other) ///
+>     continuous(age) ///
+>     methods(srs mmsb) ///
+>     nsims(20) ///
+>     seed(1) ///
+>     generator(iid) ///
+>     probs(sex: 0.48 0.52 | race: 0.62 0.23 0.15) ///
+>     meansd(age: 60 10)
+  simulation 2 of 20
+  simulation 4 of 20
+  simulation 6 of 20
+  simulation 8 of 20
+  simulation 10 of 20
+  simulation 12 of 20
+  simulation 14 of 20
+  simulation 16 of 20
+  simulation 18 of 20
+  simulation 20 of 20
+Simulation summary (mean, sd, 95th and 99th percentiles, maximum)
+
+  +-------------------------------------------------------------------------+
+  | method |  point |             metric |   mean |    sd |    q95 |    q99 |
+  |    srs | run-in |            smd_max |  1.399 | 0.793 |  3.303 |  3.654 |
+  |-------------------------------------------------------------------------|
+  |                                    max                                  |
+  |                                  3.742                                  |
+  +-------------------------------------------------------------------------+
+
+  +-------------------------------------------------------------------------+
+  | method |  point |             metric |   mean |    sd |    q95 |    q99 |
+  |    srs | run-in |            smd_sex |  0.679 | 0.596 |  1.525 |  1.905 |
+  |-------------------------------------------------------------------------|
+  |                                    max                                  |
+  |                                  2.000                                  |
+  +-------------------------------------------------------------------------+
+
+  +-------------------------------------------------------------------------+
+  | method |  point |             metric |   mean |    sd |    q95 |    q99 |
+  |    srs | run-in |           smd_race |  1.082 | 0.714 |  1.612 |  3.316 |
+  |-------------------------------------------------------------------------|
+  |                                    max                                  |
+  |                                  3.742                                  |
+  +-------------------------------------------------------------------------+
+
+  +-------------------------------------------------------------------------+
+  | method |  point |             metric |   mean |    sd |    q95 |    q99 |
+  |    srs | run-in |            smd_age |  0.755 | 0.742 |  1.639 |  2.952 |
+  |-------------------------------------------------------------------------|
+  |                                    max                                  |
+  |                                  3.280                                  |
+  +-------------------------------------------------------------------------+
+
+  +-------------------------------------------------------------------------+
+  | method |  point |             metric |   mean |    sd |    q95 |    q99 |
+  |    srs | run-in |         size_dev_A |  0.900 | 0.912 |  3.000 |  3.000 |
+  |-------------------------------------------------------------------------|
+  |                                    max                                  |
+  |                                  3.000                                  |
+  +-------------------------------------------------------------------------+
+
+  +-------------------------------------------------------------------------+
+  | method |  point |             metric |   mean |    sd |    q95 |    q99 |
+  |    srs | run-in |         size_dev_B |  0.900 | 0.912 |  3.000 |  3.000 |
+  |-------------------------------------------------------------------------|
+  |                                    max                                  |
+  |                                  3.000                                  |
+  +-------------------------------------------------------------------------+
+
+  +-------------------------------------------------------------------------+
+  | method |  point |             metric |   mean |    sd |    q95 |    q99 |
+  |    srs |    end |            smd_max |  0.531 | 0.220 |  0.880 |  1.130 |
+  |-------------------------------------------------------------------------|
+  |                                    max                                  |
+  |                                  1.192                                  |
+  +-------------------------------------------------------------------------+
+
+  +-------------------------------------------------------------------------+
+  | method |  point |             metric |   mean |    sd |    q95 |    q99 |
+  |    srs |    end |            smd_sex |  0.297 | 0.190 |  0.620 |  0.630 |
+  |-------------------------------------------------------------------------|
+  |                                    max                                  |
+  |                                  0.632                                  |
+  +-------------------------------------------------------------------------+
+
+  +-------------------------------------------------------------------------+
+  | method |  point |             metric |   mean |    sd |    q95 |    q99 |
+  |    srs |    end |           smd_race |  0.386 | 0.246 |  0.739 |  1.102 |
+  |-------------------------------------------------------------------------|
+  |                                    max                                  |
+  |                                  1.192                                  |
+  +-------------------------------------------------------------------------+
+
+  +-------------------------------------------------------------------------+
+  | method |  point |             metric |   mean |    sd |    q95 |    q99 |
+  |    srs |    end |            smd_age |  0.335 | 0.224 |  0.687 |  0.828 |
+  |-------------------------------------------------------------------------|
+  |                                    max                                  |
+  |                                  0.864                                  |
+  +-------------------------------------------------------------------------+
+
+  +-------------------------------------------------------------------------+
+  | method |  point |             metric |   mean |    sd |    q95 |    q99 |
+  |    srs |    end |         size_dev_A |  2.750 | 2.489 |  8.050 |  8.810 |
+  |-------------------------------------------------------------------------|
+  |                                    max                                  |
+  |                                  9.000                                  |
+  +-------------------------------------------------------------------------+
+
+  +-------------------------------------------------------------------------+
+  | method |  point |             metric |   mean |    sd |    q95 |    q99 |
+  |    srs |    end |         size_dev_B |  2.750 | 2.489 |  8.050 |  8.810 |
+  |-------------------------------------------------------------------------|
+  |                                    max                                  |
+  |                                  9.000                                  |
+  +-------------------------------------------------------------------------+
+
+  +-------------------------------------------------------------------------+
+  | method |  point |             metric |   mean |    sd |    q95 |    q99 |
+  |    srs |    all |  pct_deterministic |  0.000 | 0.000 |  0.000 |  0.000 |
+  |-------------------------------------------------------------------------|
+  |                                    max                                  |
+  |                                  0.000                                  |
+  +-------------------------------------------------------------------------+
+
+  +-------------------------------------------------------------------------+
+  | method |  point |             metric |   mean |    sd |    q95 |    q99 |
+  |    srs |    all | longest_forced_run |  0.000 | 0.000 |  0.000 |  0.000 |
+  |-------------------------------------------------------------------------|
+  |                                    max                                  |
+  |                                  0.000                                  |
+  +-------------------------------------------------------------------------+
+
+  +-------------------------------------------------------------------------+
+  | method |  point |             metric |   mean |    sd |    q95 |    q99 |
+  |    srs |    all |      correct_guess | 50.000 | 0.000 | 50.000 | 50.000 |
+  |-------------------------------------------------------------------------|
+  |                                    max                                  |
+  |                                 50.000                                  |
+  +-------------------------------------------------------------------------+
+
+  +-------------------------------------------------------------------------+
+  | method |  point |             metric |   mean |    sd |    q95 |    q99 |
+  |   mmsb | run-in |            smd_max |  1.293 | 0.626 |  2.411 |  2.745 |
+  |-------------------------------------------------------------------------|
+  |                                    max                                  |
+  |                                  2.828                                  |
+  +-------------------------------------------------------------------------+
+
+  +-------------------------------------------------------------------------+
+  | method |  point |             metric |   mean |    sd |    q95 |    q99 |
+  |   mmsb | run-in |            smd_sex |  0.602 | 0.656 |  1.566 |  2.576 |
+  |-------------------------------------------------------------------------|
+  |                                    max                                  |
+  |                                  2.828                                  |
+  +-------------------------------------------------------------------------+
+
+  +-------------------------------------------------------------------------+
+  | method |  point |             metric |   mean |    sd |    q95 |    q99 |
+  |   mmsb | run-in |           smd_race |  0.919 | 0.469 |  1.732 |  1.732 |
+  |-------------------------------------------------------------------------|
+  |                                    max                                  |
+  |                                  1.732                                  |
+  +-------------------------------------------------------------------------+
+
+  +-------------------------------------------------------------------------+
+  | method |  point |             metric |   mean |    sd |    q95 |    q99 |
+  |   mmsb | run-in |            smd_age |  0.676 | 0.669 |  2.276 |  2.366 |
+  |-------------------------------------------------------------------------|
+  |                                    max                                  |
+  |                                  2.389                                  |
+  +-------------------------------------------------------------------------+
+
+  +-------------------------------------------------------------------------+
+  | method |  point |             metric |   mean |    sd |    q95 |    q99 |
+  |   mmsb | run-in |         size_dev_A |  0.000 | 0.000 |  0.000 |  0.000 |
+  |-------------------------------------------------------------------------|
+  |                                    max                                  |
+  |                                  0.000                                  |
+  +-------------------------------------------------------------------------+
+
+  +-------------------------------------------------------------------------+
+  | method |  point |             metric |   mean |    sd |    q95 |    q99 |
+  |   mmsb | run-in |         size_dev_B |  0.000 | 0.000 |  0.000 |  0.000 |
+  |-------------------------------------------------------------------------|
+  |                                    max                                  |
+  |                                  0.000                                  |
+  +-------------------------------------------------------------------------+
+
+  +-------------------------------------------------------------------------+
+  | method |  point |             metric |   mean |    sd |    q95 |    q99 |
+  |   mmsb |    end |            smd_max |  0.417 | 0.151 |  0.621 |  0.681 |
+  |-------------------------------------------------------------------------|
+  |                                    max                                  |
+  |                                  0.696                                  |
+  +-------------------------------------------------------------------------+
+
+  +-------------------------------------------------------------------------+
+  | method |  point |             metric |   mean |    sd |    q95 |    q99 |
+  |   mmsb |    end |            smd_sex |  0.223 | 0.141 |  0.434 |  0.505 |
+  |-------------------------------------------------------------------------|
+  |                                    max                                  |
+  |                                  0.523                                  |
+  +-------------------------------------------------------------------------+
+
+  +-------------------------------------------------------------------------+
+  | method |  point |             metric |   mean |    sd |    q95 |    q99 |
+  |   mmsb |    end |           smd_race |  0.353 | 0.134 |  0.555 |  0.578 |
+  |-------------------------------------------------------------------------|
+  |                                    max                                  |
+  |                                  0.583                                  |
+  +-------------------------------------------------------------------------+
+
+  +-------------------------------------------------------------------------+
+  | method |  point |             metric |   mean |    sd |    q95 |    q99 |
+  |   mmsb |    end |            smd_age |  0.294 | 0.205 |  0.621 |  0.681 |
+  |-------------------------------------------------------------------------|
+  |                                    max                                  |
+  |                                  0.696                                  |
+  +-------------------------------------------------------------------------+
+
+  +-------------------------------------------------------------------------+
+  | method |  point |             metric |   mean |    sd |    q95 |    q99 |
+  |   mmsb |    end |         size_dev_A |  0.000 | 0.000 |  0.000 |  0.000 |
+  |-------------------------------------------------------------------------|
+  |                                    max                                  |
+  |                                  0.000                                  |
+  +-------------------------------------------------------------------------+
+
+  +-------------------------------------------------------------------------+
+  | method |  point |             metric |   mean |    sd |    q95 |    q99 |
+  |   mmsb |    end |         size_dev_B |  0.000 | 0.000 |  0.000 |  0.000 |
+  |-------------------------------------------------------------------------|
+  |                                    max                                  |
+  |                                  0.000                                  |
+  +-------------------------------------------------------------------------+
+
+  +-------------------------------------------------------------------------+
+  | method |  point |             metric |   mean |    sd |    q95 |    q99 |
+  |   mmsb |    all |  pct_deterministic |  8.500 | 2.351 | 12.500 | 12.500 |
+  |-------------------------------------------------------------------------|
+  |                                    max                                  |
+  |                                 12.500                                  |
+  +-------------------------------------------------------------------------+
+
+  +-------------------------------------------------------------------------+
+  | method |  point |             metric |   mean |    sd |    q95 |    q99 |
+  |   mmsb |    all | longest_forced_run |  2.150 | 0.671 |  3.000 |  3.000 |
+  |-------------------------------------------------------------------------|
+  |                                    max                                  |
+  |                                  3.000                                  |
+  +-------------------------------------------------------------------------+
+
+  +-------------------------------------------------------------------------+
+  | method |  point |             metric |   mean |    sd |    q95 |    q99 |
+  |   mmsb |    all |      correct_guess | 61.942 | 2.544 | 66.069 | 66.965 |
+  |-------------------------------------------------------------------------|
+  |                                    max                                  |
+  |                                 67.190                                  |
+  +-------------------------------------------------------------------------+
+
+. 
+end of do-file
+
+. do "05-encrypted-demo.do"
+
+. version 19
+
+. clear
+
+. set linesize 80
+
+. 
+. python:
+----------------------------------------------- python (type end to exit) ------
+>>> import os
+>>> import secrets
+>>> 
+>>> previous = {name: value for name, value in os.environ.items() if name == "GR
+> ACEDR_PASSPHRASE"}
+>>> os.environ["GRACEDR_PASSPHRASE"] = secrets.token_hex(16)
+>>> end
+--------------------------------------------------------------------------------
+
+. 
+. local study "studies/encrypted"
+
+. remove_folder "`study'"
+
+. 
+. gracedr setup, ///
+>     study("`study'") ///
+>     n(40) ///
+>     arms(A B) ///
+>     categorical(sex: male female | race: white black other) ///
+>     continuous(age) ///
+>     codes("data/example_codes.csv") ///
+>     seed(20260611) ///
+>     encrypt
+gracedr: 200 treatment codes are valid.
+  arm A: 100 codes
+  arm B: 100 codes
+(file studies/encrypted/design.zip not found)
+(file studies/encrypted/codes.zip not found)
+(file studies/encrypted/participants.zip not found)
+(file studies/encrypted/state.zip not found)
+(file studies/encrypted/audit.zip not found)
+gracedr: study created in studies/encrypted
+  40 participants planned, run-in 10, seed 20260611
+
+. 
+. use "data/example_participants.dta", clear
+
+. local total = _N
+
+. forvalues row = 1/`total' {
+  2.     local id = id[`row']
+  3.     local sex = sex[`row']
+  4.     local race = race[`row']
+  5.     local age = age[`row']
+  6.     quietly gracedr randomize, study("`study'") id(`id') sex(`sex') race(`r
+> ace') age(`age')
+  7. }
+
+. 
+. local last_id "`r(id)'"
+
+. local last_arm "`r(arm)'"
+
+. local new_arm = cond("`last_arm'" == "A", "B", "A")
+
+. gracedr override, ///
+>     study("`study'") ///
+>     id(`last_id') ///
+>     arm(`new_arm') ///
+>     reason("Wrong race entered in the example.")
+Participant P040 changed from arm A to arm B
+Code 11394 voided, new code 71284
+
+. 
+. local files : dir "`study'" files "*"
+
+. display as text `"Files in the encrypted study: `files'"'
+Files in the encrypted study: "audit.bak.zip" "audit.zip" "codes.bak.zip" "codes
+> .zip" "design.zip" "participants.bak.zip" "participants.zip" "state.bak.zip" "
+> state.zip"
+
+. gracedr status, study("`study'")
+Study status: 40 participants randomized
+Group sizes
+Arm                        n     pct   Next target  Final target
+A                         19    47.5            20            20
+B                         21    52.5            20            20
+Balance by arm
+  arm1 = A
+  arm2 = B
+
+  +-----------------------------------------------------------------+
+  | variable    level          arm1         arm2   nmissing     smd |
+  |-----------------------------------------------------------------|
+  |      sex     male    13 (68.4%)   14 (66.7%)          0   0.037 |
+  |      sex   female     6 (31.6%)    7 (33.3%)          0   0.037 |
+  |     race    white    10 (52.6%)   14 (66.7%)          0   0.289 |
+  |     race    black     4 (21.1%)    3 (14.3%)          0   0.289 |
+  |     race    other     5 (26.3%)    4 (19.0%)          0   0.289 |
+  |      age            59.4 (13.0)   60.5 (9.0)          0   0.101 |
+  +-----------------------------------------------------------------+
+
+. 
+. use_study_participants "studies/example"
+
+. drop time
+
+. tempfile plain
+
+. quietly save `"`plain'"'
+
+. use_study_participants "`study'"
+
+. drop time
+
+. local rows = _N
+
+. cf _all using `"`plain'"'
+
+. display as text "The encrypted and the plain study agree on `rows' participant
+> s."
+The encrypted and the plain study agree on 40 participants.
+
+. 
+. python:
+----------------------------------------------- python (type end to exit) ------
+>>> import os
+>>> 
+>>> removed = os.environ.pop("GRACEDR_PASSPHRASE", None)
+>>> os.environ.update(previous)
+>>> end
+--------------------------------------------------------------------------------
+
+. 
+end of do-file
+
+. do "06-simulation-tables.do"
+
+. version 19
+
+. clear
+
+. set linesize 100
+
+. 
+. use "results/stats_all.dta", clear
+
+. replace setting = "" if !inrange(methodno, 1, 1)
+(16 real changes made)
+
+. 
+. generate str18 end_se = string(meansmd_end, "%5.3f") + " (" + string(sesmd_end, "%5.3f") + ")"
+
+. generate str8 end_q95 = string(q95smd_end, "%5.3f")
+
+. generate str8 runin = string(meansmd_runin, "%5.3f")
+
+. show_table setting method_label end_se end_q95 runin, ///
+>     title("Table: largest standardized mean difference, mean (SE), 95th percentile, run-in mean")
+
+Table: largest standardized mean difference, mean (SE), 95th percentile, run-in mean
+
+  +-------------------------------------------------------------------------+
+  |        setting           method_label          end_se   end_q95   runin |
+  |-------------------------------------------------------------------------|
+  |   N = 200, iid   Simple randomization   0.212 (0.003)     0.359   0.768 |
+  |                       Permuted blocks   0.214 (0.003)     0.368   0.709 |
+  |                          Minimization   0.077 (0.001)     0.151   0.494 |
+  |                                   MSB   0.150 (0.001)     0.221   0.622 |
+  |                          Modified MSB   0.162 (0.002)     0.254   0.617 |
+  | N = 200, drift   Simple randomization   0.211 (0.003)     0.355   0.734 |
+  |                       Permuted blocks   0.198 (0.003)     0.338   0.691 |
+  |                          Minimization   0.073 (0.001)     0.147   0.549 |
+  |                                   MSB   0.152 (0.001)     0.228   0.628 |
+  |                          Modified MSB   0.159 (0.002)     0.251   0.613 |
+  |   N = 500, iid   Simple randomization   0.136 (0.002)     0.225   0.446 |
+  |                       Permuted blocks   0.133 (0.002)     0.224   0.448 |
+  |                          Minimization   0.040 (0.001)     0.091   0.234 |
+  |                                   MSB   0.091 (0.001)     0.136   0.341 |
+  |                          Modified MSB   0.097 (0.001)     0.148   0.342 |
+  | N = 500, drift   Simple randomization   0.133 (0.002)     0.213   0.447 |
+  |                       Permuted blocks   0.125 (0.002)     0.213   0.448 |
+  |                          Minimization   0.037 (0.001)     0.078   0.285 |
+  |                                   MSB   0.091 (0.001)     0.135   0.350 |
+  |                          Modified MSB   0.093 (0.001)     0.143   0.353 |
+  +-------------------------------------------------------------------------+
+
+. 
+. generate str8 exact_runin = string(exactrunin, "%5.1f")
+
+. generate str8 exact_end = string(exactend, "%5.1f")
+
+. generate str14 difference = string(meandev_end, "%5.2f") + " (" + string(maxdev_end, "%3.0f") + ")
+> "
+
+. show_table setting method_label exact_runin exact_end difference, ///
+>     title("Table: percent exact at run-in and at end, final difference, mean (max)")
+
+Table: percent exact at run-in and at end, final difference, mean (max)
+
+  +------------------------------------------------------------------------------+
+  |        setting           method_label   exact_runin   exact_end   difference |
+  |------------------------------------------------------------------------------|
+  |   N = 200, iid   Simple randomization          18.6         6.9    5.50 (23) |
+  |                       Permuted blocks         100.0       100.0     0.00 (0) |
+  |                          Minimization          48.9        45.3     0.64 (4) |
+  |                                   MSB          17.2         4.4    5.75 (25) |
+  |                          Modified MSB         100.0       100.0     0.00 (0) |
+  | N = 200, drift   Simple randomization          18.6         6.9    5.50 (23) |
+  |                       Permuted blocks         100.0       100.0     0.00 (0) |
+  |                          Minimization          54.8        46.7     0.63 (4) |
+  |                                   MSB          17.3         5.3    6.14 (26) |
+  |                          Modified MSB         100.0       100.0     0.00 (0) |
+  |   N = 500, iid   Simple randomization          11.0         3.0    8.72 (37) |
+  |                       Permuted blocks          68.0       100.0     0.00 (0) |
+  |                          Minimization          46.2        43.7     0.66 (4) |
+  |                                   MSB          11.1         3.2    9.23 (34) |
+  |                          Modified MSB         100.0       100.0     0.00 (0) |
+  | N = 500, drift   Simple randomization          11.0         3.0    8.72 (37) |
+  |                       Permuted blocks          68.0       100.0     0.00 (0) |
+  |                          Minimization          50.7        46.8     0.62 (3) |
+  |                                   MSB          10.7         2.4   10.22 (44) |
+  |                          Modified MSB         100.0       100.0     0.00 (0) |
+  +------------------------------------------------------------------------------+
+
+. 
+. generate str8 forced = string(meanforced, "%5.1f")
+
+. generate str12 longest_run = string(meanrun, "%5.1f") + " (" + string(maxrun, "%3.0f") + ")"
+
+. generate str14 guess = string(meanguess, "%5.2f") + " (" + string(seguess, "%5.2f") + ")"
+
+. show_table setting method_label forced longest_run guess, ///
+>     title("Table: percent forced, longest forced run mean (max), correct guess mean (SE)")
+
+Table: percent forced, longest forced run mean (max), correct guess mean (SE)
+
+  +-----------------------------------------------------------------------------+
+  |        setting           method_label   forced   longest_run          guess |
+  |-----------------------------------------------------------------------------|
+  |   N = 200, iid   Simple randomization      0.0       0.0 (0)   50.00 (0.00) |
+  |                       Permuted blocks     33.2       2.0 (2)   70.79 (0.03) |
+  |                          Minimization      0.0       0.0 (0)   61.75 (0.05) |
+  |                                   MSB      0.0       0.0 (0)   49.89 (0.03) |
+  |                          Modified MSB      2.4       2.1 (7)   59.34 (0.04) |
+  | N = 200, drift   Simple randomization      0.0       0.0 (0)   50.00 (0.00) |
+  |                       Permuted blocks     33.2       2.0 (2)   70.79 (0.03) |
+  |                          Minimization      0.0       0.0 (0)   62.12 (0.05) |
+  |                                   MSB      0.0       0.0 (0)   49.59 (0.05) |
+  |                          Modified MSB      2.4       2.1 (7)   59.31 (0.05) |
+  |   N = 500, iid   Simple randomization      0.0       0.0 (0)   50.00 (0.00) |
+  |                       Permuted blocks     33.4       2.0 (2)   70.85 (0.02) |
+  |                          Minimization      0.0       0.0 (0)   61.66 (0.03) |
+  |                                   MSB      0.0       0.0 (0)   49.93 (0.02) |
+  |                          Modified MSB      1.7      2.2 (10)   58.50 (0.03) |
+  | N = 500, drift   Simple randomization      0.0       0.0 (0)   50.00 (0.00) |
+  |                       Permuted blocks     33.4       2.0 (2)   70.85 (0.02) |
+  |                          Minimization      0.0       0.0 (0)   61.86 (0.04) |
+  |                                   MSB      0.0       0.0 (0)   49.67 (0.04) |
+  |                          Modified MSB      1.7      2.3 (10)   58.48 (0.03) |
+  +-----------------------------------------------------------------------------+
+
+. 
+. use "results/paired_all.dta", clear
+
+. reshape wide mean lower upper, i(cell method) j(key) string
+(j = guess smd)
+
+Data                               Long   ->   Wide
+-----------------------------------------------------------------------------
+Number of observations               32   ->   16          
+Number of variables                   6   ->   8           
+j variable (2 values)               key   ->   (dropped)
+xij variables:
+                                   mean   ->   meanguess meansmd
+                                  lower   ->   lowerguess lowersmd
+                                  upper   ->   upperguess uppersmd
+-----------------------------------------------------------------------------
+
+. generate byte cellno = .
+(16 missing values generated)
+
+. local position = 0
+
+. foreach cell of global cells {
+  2.     local position = `position' + 1
+  3.     replace cellno = `position' if cell == "`cell'"
+  4. }
+(4 real changes made)
+(4 real changes made)
+(4 real changes made)
+(4 real changes made)
+
+. generate byte methodno = (method == "srs") + 2 * (method == "blocks") ///
+>     + 3 * (method == "minimization") + 4 * (method == "msb")
+
+. sort cellno methodno
+
+. generate str16 setting = "N = " + substr(cell, 2, 3) + ", " + substr(cell, 6, .)
+
+. replace setting = "" if !inrange(methodno, 1, 1)
+(12 real changes made)
+
+. generate str28 smd_difference = string(meansmd, "%7.4f") + " (" + string(lowersmd, "%7.4f") ///
+>     + ", " + string(uppersmd, "%7.4f") + ")"
+
+. generate str28 guess_difference = string(meanguess, "%6.1f") ///
+>     + " (" + string(lowerguess, "%6.1f") + ", " + string(upperguess, "%6.1f") + ")"
+
+. show_table setting method smd_difference guess_difference, ///
+>     title("Table: differences from modified MSB, mean (95% interval)")
+
+Table: differences from modified MSB, mean (95% interval)
+
+  +--------------------------------------------------------------------------------+
+  |        setting         method               smd_difference    guess_difference |
+  |--------------------------------------------------------------------------------|
+  |   N = 200, iid            srs      0.0499 (0.0452, 0.0546)   -9.3 (-9.4, -9.3) |
+  |                        blocks      0.0523 (0.0467, 0.0578)   11.4 (11.3, 11.5) |
+  |                  minimization   -0.0846 (-0.0884, -0.0807)      2.4 (2.3, 2.5) |
+  |                           msb   -0.0118 (-0.0152, -0.0085)   -9.4 (-9.6, -9.3) |
+  | N = 200, drift            srs      0.0523 (0.0476, 0.0571)   -9.3 (-9.4, -9.2) |
+  |                        blocks      0.0390 (0.0336, 0.0444)   11.5 (11.4, 11.6) |
+  |                  minimization   -0.0859 (-0.0898, -0.0820)      2.8 (2.7, 2.9) |
+  |                           msb   -0.0072 (-0.0107, -0.0037)   -9.7 (-9.8, -9.6) |
+  |   N = 500, iid            srs      0.0396 (0.0367, 0.0425)   -8.5 (-8.6, -8.4) |
+  |                        blocks      0.0362 (0.0327, 0.0396)   12.4 (12.3, 12.4) |
+  |                  minimization   -0.0561 (-0.0585, -0.0538)      3.2 (3.1, 3.2) |
+  |                           msb   -0.0057 (-0.0076, -0.0039)   -8.6 (-8.6, -8.5) |
+  | N = 500, drift            srs      0.0401 (0.0373, 0.0430)   -8.5 (-8.5, -8.4) |
+  |                        blocks      0.0317 (0.0286, 0.0349)   12.4 (12.3, 12.4) |
+  |                  minimization   -0.0558 (-0.0581, -0.0535)      3.4 (3.3, 3.5) |
+  |                           msb   -0.0021 (-0.0040, -0.0002)   -8.8 (-8.9, -8.7) |
+  +--------------------------------------------------------------------------------+
+
+. 
+end of do-file
+
+. do "07-figure.do"
+
+. version 19
+
+. clear
+
+. 
+. use "results/stats_all.dta", clear
+
+. local symbols "Oh Th S X O"
+
+. local plots ""
+
+. local position = 0
+
+. foreach method in srs blocks minimization msb mmsb {
+  2.     local position = `position' + 1
+  3.     local symbol : word `position' of `symbols'
+  4.     local series `"(scatter meansmd_end meanguess if method == "`method'","'
+  5.     local series `"`series' msymbol(`symbol') mcolor(black) mlabel(method_label)"'
+  6.     local series `"`series' mlabsize(vsmall) mlabcolor(black))"'
+  7.     local plots `"`plots' `series'"'
+  8. }
+
+. twoway `plots', ///
+>     by(setting, cols(2) legend(off) note("")) ///
+>     xtitle("Correct-guess probability (%)") ///
+>     ytitle("Mean largest SMD at end") ///
+>     xscale(range(44 82)) ///
+>     ylabel(, angle(horizontal))
+
+. graph export "figures/tradeoff.pdf", replace
+file figures/tradeoff.pdf saved as PDF format
+
+. 
+end of do-file
+
+. 
+. log close

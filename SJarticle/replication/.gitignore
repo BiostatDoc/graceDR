@@ -1,0 +1,8 @@
+data/*
+results/*
+figures/*
+studies/*
+!data/.gitkeep
+!results/.gitkeep
+!figures/.gitkeep
+!studies/.gitkeep
