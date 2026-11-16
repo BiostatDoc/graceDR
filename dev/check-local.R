@@ -1,7 +1,4 @@
-quarto_tools <- "C:/Program Files/Quarto/bin/tools"
-if (!nzchar(Sys.getenv("RSTUDIO_PANDOC")) && dir.exists(quarto_tools)) {
-  Sys.setenv(RSTUDIO_PANDOC = quarto_tools)
-}
+source("dev/set-pandoc.R")
 
 check_passes <- function(result) {
   only_new_submission <- length(result$notes) <= 1 &&
