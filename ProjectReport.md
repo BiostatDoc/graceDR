@@ -294,6 +294,53 @@ The repository allows only squash merges and deletes each branch after it merges
 comment before it is merged, and a card moves to Done only after its pull request merges. The
 19 squashed commits that delivered the cards each list Claude Sonnet 5.5 as co-author.
 
+### The local Stata runner
+
+GitHub's hosted machines have no Stata license, so the Stata checks needed a machine that does.
+The project's own Windows computer became that machine.
+
+What was added:
+
+- The GitHub Actions runner program, version 2.338.2, in a folder on the computer's C drive.
+  `config.cmd` registered it to the repository with the default labels `self-hosted`, `Windows`
+  and `X64`. The workflow in `.github/workflows/stata.yml` asks for `[self-hosted, windows]`, so
+  only this runner takes the Stata jobs.
+- A guard that keeps outside code off the machine: the Stata jobs run only for pull requests from
+  the repository itself, never from forks.
+- The tools the jobs call, all installed on that computer: Stata 19, the `stata_linter` package,
+  Python with `pyzipper`, Git, and Git Bash from Rtools.
+
+How it became an automatic service:
+
+1. The first setup ran the runner by hand with `run.cmd` in a PowerShell window. The checks only
+   ran while that window stayed open, and the answer to the setup question about installing a
+   service had been No.
+2. A short PowerShell script, run once from an administrator window, did the conversion. It first
+   checked the Windows password against the account, with three tries and no changes if all
+   failed, so a typo could not leave a half-configured runner. It then stopped the hand-run
+   runner, asked GitHub for a fresh removal token and a fresh registration token with the
+   `gh` login, removed the old registration, and registered the runner again with the options
+   `--runasservice`, `--windowslogonaccount` and `--windowslogonpassword`. The tokens and the
+   password were never written to a file.
+3. The service runs as the user's own account, not the default `NETWORK SERVICE` account. Only
+   the user's account can see the Stata license and ado-path, the Python packages, and the Git and
+   Rtools setup. The service starts when the computer starts and shows as `Running` with start
+   type `Automatic` in the Windows service list.
+4. A re-run of the Stata workflow with no PowerShell window open passed both `stata-lint` and
+   `stata-test`, which showed that the service can start Stata, the linter and Python.
+
+What it gained:
+
+- `stata-lint` and `stata-test` run on every pull request and every change to `main` with no one
+  starting anything, so a pull request cannot reach review without the Stata certification.
+- The checks use the real licensed Stata 19 that the package targets, not a substitute.
+- No terminal window has to stay open.
+
+Limits: the computer must be on and online for a check to start, and a check waits in the queue
+while it is off. If the Windows password changes, the service logon must be
+updated, either by running the script again or in the Windows services tool. Starting after a
+reboot has not been tested.
+
 ### Jira cards and pull requests
 
 The Jira project GRACE has six epics and 21 cards. This table lists each card with the pull
