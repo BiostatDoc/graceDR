@@ -19,7 +19,8 @@ endif
 endif
 endif
 
-.PHONY: format lint test check stata-pre-pr pre-pr cran-local cran-win-devel cran-rhub
+.PHONY: format lint test check stata-pre-pr pre-pr \
+	cran-local cran-win-devel cran-rhub cran-preflight
 
 format:
 	Rscript -e "styler::style_pkg()"
@@ -49,3 +50,6 @@ cran-win-devel:
 
 cran-rhub:
 	Rscript dev/check-rhub.R --yes
+
+cran-preflight:
+	Rscript dev/submit-preflight.R
