@@ -15,8 +15,19 @@ if (-not $env:TMP) {
     $env:TMP = $env:TEMP
 }
 
-Start-Process `
-    -FilePath $StataExe `
-    -ArgumentList "/e", "do", "`"$DoFile`"" `
-    -Wait `
-    -WorkingDirectory $WorkDir
+$tempBase = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { $env:TEMP }
+$runTemp = Join-Path $tempBase ("gracedr-stata-" + [guid]::NewGuid().ToString("N"))
+New-Item -ItemType Directory -Path $runTemp | Out-Null
+$env:TEMP = $runTemp
+$env:TMP = $runTemp
+
+try {
+    Start-Process `
+        -FilePath $StataExe `
+        -ArgumentList "/e", "do", "`"$DoFile`"" `
+        -Wait `
+        -WorkingDirectory $WorkDir
+}
+finally {
+    Remove-Item -Recurse -Force -Path $runTemp -ErrorAction SilentlyContinue
+}
