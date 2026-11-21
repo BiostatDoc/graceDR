@@ -8,7 +8,7 @@ global methods srs blocks minimization msb mmsb
 global nsims 1000
 global seed 20260611
 
-local release "stata-v0.1.0"
+local release "stata-v1.0.0"
 local source : environment GRACEDR_SOURCE
 if "`source'" == "" {
     local source "https://raw.githubusercontent.com/BiostatDoc/graceDR/`release'/stata"
