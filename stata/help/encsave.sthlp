@@ -52,3 +52,16 @@ with {opt session} do not ask again. The password stays in Python's memory only.
 
 {psee}
 {help encuse}
+
+
+{title:Authors}
+
+{pstd}Grace Huiyi Ma{p_end}
+{pstd}Dutch Fork High School STEM Magnet Program{p_end}
+{pstd}Irmo, South Carolina{p_end}
+
+{pstd}James W. Hardin{p_end}
+{pstd}Department of Epidemiology and Biostatistics{p_end}
+{pstd}University of South Carolina{p_end}
+{pstd}Columbia, South Carolina{p_end}
+{pstd}jhardin@sc.edu{p_end}

@@ -1,3 +1,4 @@
+*! version 1.0.0  15nov2026
 program define encuse
     version 19
     syntax using/ [, CLEAR SESSION]

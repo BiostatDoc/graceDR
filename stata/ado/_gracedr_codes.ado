@@ -1,3 +1,4 @@
+*! version 1.0.0  15nov2026
 program define _gracedr_codes, rclass
     version 19
     syntax using/, ARMS(string asis)
