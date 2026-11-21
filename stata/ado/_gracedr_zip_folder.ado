@@ -9,7 +9,8 @@ program define _gracedr_zip_folder, rclass
     local sibling "`ado_folder'/../python"
     capture confirm file "`sibling'/gracedr_zip.py"
     if _rc == 0 {
-        return local folder "`sibling'"
+        _gracedr_home, path("`sibling'")
+        return local folder `"`r(path)'"'
         exit
     }
     capture quietly findfile gracedr_zip.py
@@ -21,5 +22,6 @@ program define _gracedr_zip_folder, rclass
     local module_file = subinstr(`"`r(fn)'"', "`backslash'", "/", .)
     local trim = strlen("gracedr_zip.py") + 1
     local module_folder = substr("`module_file'", 1, strlen("`module_file'") - `trim')
-    return local folder "`module_folder'"
+    _gracedr_home, path("`module_folder'")
+    return local folder `"`r(path)'"'
 end
