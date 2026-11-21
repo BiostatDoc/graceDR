@@ -6,12 +6,14 @@ program define _gracedr_zip_folder, rclass
     local ado_file = subinstr(`"`r(fn)'"', "`backslash'", "/", .)
     local trim = strlen("_gracedr_zip_folder.ado") + 1
     local ado_folder = substr("`ado_file'", 1, strlen("`ado_file'") - `trim')
-    local sibling "`ado_folder'/../python"
-    capture confirm file "`sibling'/gracedr_zip.py"
-    if _rc == 0 {
-        _gracedr_home, path("`sibling'")
-        return local folder `"`r(path)'"'
-        exit
+    foreach name in py python {
+        local sibling "`ado_folder'/../`name'"
+        capture confirm file "`sibling'/gracedr_zip.py"
+        if _rc == 0 {
+            _gracedr_home, path("`sibling'")
+            return local folder `"`r(path)'"'
+            exit
+        }
     }
     capture quietly findfile gracedr_zip.py
     local module_found = _rc == 0
