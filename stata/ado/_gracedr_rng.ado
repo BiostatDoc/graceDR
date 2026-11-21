@@ -1,3 +1,4 @@
+*! version 1.0.0  15nov2026
 program define _gracedr_rng
     version 19
     gettoken subcommand 0 : 0, parse(" ,")

@@ -4,18 +4,11 @@ local stata_dir : environment GRACEDR_STATA_DIR
 assert !missing("`stata_dir'")
 adopath ++ "`stata_dir'/ado"
 
-local system_root : environment SYSTEMROOT
-local launcher "`system_root'/System32/WindowsPowerShell/v1.0/powershell.exe"
-local flags "-NoProfile -Command"
-local offset_command "[TimeZoneInfo]::Local.GetUtcOffset([DateTime]::Now).TotalMinutes"
-local redirect = char(62)
-tempfile offset_file
-quietly shell "`launcher'" `flags' "`offset_command'" `redirect' "`offset_file'"
-tempname handle
-file open `handle' using "`offset_file'", read text
-file read `handle' reading
-file close `handle'
-local offset_minutes = real(strtrim(`"`reading'"'))
+tempname offset_scalar
+local fetch "from sfi import Scalar; from datetime import datetime"
+local offset_seconds "datetime.now().astimezone().utcoffset().total_seconds()"
+python: `fetch'; Scalar.setValue("`offset_scalar'", `offset_seconds')
+local offset_minutes = scalar(`offset_scalar') / 60
 assert !missing(`offset_minutes')
 
 _gracedr_utc

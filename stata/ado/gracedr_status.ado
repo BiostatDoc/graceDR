@@ -1,3 +1,4 @@
+*! version 1.0.0  15nov2026
 program define gracedr_status, rclass
     version 19
     syntax , STUDY(string) [FROM(string) TO(string) CHECKPOINT(string) VARS(string) ///

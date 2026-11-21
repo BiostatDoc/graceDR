@@ -30,3 +30,16 @@ folder that holds the study files. The subcommands are:
 
 {pstd}
 Typing {cmd:gracedr} alone lists the subcommands.
+
+
+{title:Authors}
+
+{pstd}Grace Huiyi Ma{p_end}
+{pstd}Dutch Fork High School STEM Magnet Program{p_end}
+{pstd}Irmo, South Carolina{p_end}
+
+{pstd}James W. Hardin{p_end}
+{pstd}Department of Epidemiology and Biostatistics{p_end}
+{pstd}University of South Carolina{p_end}
+{pstd}Columbia, South Carolina{p_end}
+{pstd}jhardin@sc.edu{p_end}

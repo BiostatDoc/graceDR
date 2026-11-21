@@ -1,3 +1,4 @@
+*! version 1.0.0  15nov2026
 program define _gracedr_save
     version 19
     syntax , STUDY(string) STEP(string) [WRITTEN(string) ID(string) ARM(string) ///

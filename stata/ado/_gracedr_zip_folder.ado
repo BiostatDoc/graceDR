@@ -1,3 +1,4 @@
+*! version 1.0.0  15nov2026
 program define _gracedr_zip_folder, rclass
     version 19
     local backslash = char(92)

@@ -70,3 +70,16 @@ next target, final target by arm), the matrix {cmd:r(smd)} (one row per variable
 
 {psee}
 {help gracedr}, {help gracedr_randomize}
+
+
+{title:Authors}
+
+{pstd}Grace Huiyi Ma{p_end}
+{pstd}Dutch Fork High School STEM Magnet Program{p_end}
+{pstd}Irmo, South Carolina{p_end}
+
+{pstd}James W. Hardin{p_end}
+{pstd}Department of Epidemiology and Biostatistics{p_end}
+{pstd}University of South Carolina{p_end}
+{pstd}Columbia, South Carolina{p_end}
+{pstd}jhardin@sc.edu{p_end}

@@ -1,3 +1,4 @@
+*! version 1.0.0  15nov2026
 program define encsave
     version 19
     syntax using/ [, REPLACE SESSION]
