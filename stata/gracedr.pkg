@@ -20,6 +20,7 @@ f ado/_gracedr_filters.ado
 f ado/_gracedr_generate.ado
 f ado/_gracedr_generate.mata
 f ado/_gracedr_graphs.ado
+f ado/_gracedr_home.ado
 f ado/_gracedr_metrics.ado
 f ado/_gracedr_metrics.mata
 f ado/_gracedr_mmsb.ado
