@@ -32,7 +32,12 @@ sjlatex install using "C:/sjclass"
 
 Then copy `statapress.cls`, `pagedims.sty`, `sj.sty`, `stata.sty`, and `sj.bst` from that folder to
 this folder. `.gitignore` keeps them out of git. The first compile may install other packages, such
-as `crop`, through your TeX distribution. The article was built with MiKTeX and LuaLaTeX.
+as `crop`, through your TeX distribution.
+
+The same install also makes `sj.tex` (the author guide), `sj.bib`, `sj.version`, `tl.eps`,
+and `tr.eps`. The article does not use them, and `.gitignore` keeps them out of git too.
+`.gitignore` also keeps out the build output: `*.synctex.gz` and the `README.html`
+previews. The article was built with MiKTeX and LuaLaTeX.
 
 ## Build
 

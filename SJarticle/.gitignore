@@ -3,6 +3,11 @@
 /sj.sty
 /stata.sty
 /sj.bst
+/sj.tex
+/sj.bib
+/sj.version
+/tl.eps
+/tr.eps
 /article.pdf
 /*.aux
 /*.bbl
@@ -12,3 +17,5 @@
 /*.toc
 /*.lof
 /*.lot
+/*.synctex.gz
+*.html
