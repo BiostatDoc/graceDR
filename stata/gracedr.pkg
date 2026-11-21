@@ -6,7 +6,7 @@ d participants one at a time with the modified minimal sufficient balance method
 d reports balance, keeps an audit log, and simulates trials under several methods.
 d
 d Requires Stata 19.
-d Distribution-Date: 20261115
+d Distribution-Date: 20261121
 d
 d Example files: type net get gracedr to copy them to the current folder.
 d
