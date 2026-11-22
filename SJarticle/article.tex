@@ -53,7 +53,7 @@ permuted blocks and higher than for unmodified minimal sufficient balance and
 for minimization, and its expected correct-guess probability was 58.5\% to
 59.3\%, compared with 70.8\% to 70.9\% for permuted blocks of size four and
 61.7\% to 62.1\% for minimization.
-\keywords{\inserttag, gracedr, randomize, encsave, encuse, covariate-adaptive
+\keywords{\inserttag, \gracedr, randomize, \texttt{encsave}, \texttt{encuse}, covariate-adaptive
 randomization, minimal sufficient balance, dynamic randomization, allocation
 randomness, encryption}
 \end{abstract}
@@ -140,16 +140,19 @@ it. The participant is assigned by one draw from $\phi(i)$.
 \subsection{Minimal sufficient balance votes}
 \label{sec:votes}
 
-Each balance variable $v$ has a weight $w_v > 0$. The weights are rescaled to
+Each balance variable $v$ has a weight $w_v > 0$ that we think of
+as a type of importance weight. That is, these weights reflect the 
+proportion of that variable's contribution to calculating overall
+imbalance.  The weights are rescaled to
 sum to one, and equal weights are the default. Each variable casts a vote for
-one arm or no vote. A vote is cast only when the imbalance between the arms
+one arm or no vote. Votes are collected only when the imbalance between the arms
 among the participants already randomized is large enough, as measured by a
-$p$-value below the limit $p^\ast$ (default 0.30), and when the current
-participant's value allows the assignment to reduce that imbalance
+$p$-value below a user-specified limit $p^\ast$ (default 0.30), and when the current
+participant's value allows specific group assignment to reduce that imbalance
 \citep{zhao2015msb}. A participant whose value of a variable is missing casts
 no vote for that variable.
 
-\emph{Categorical variables.} Let $T$ be the table of previous participants by
+\emph{Categorical variables.} Let $T$ be the table of previously randomized participants by
 level and arm. Levels with no previous participants are dropped. No vote is
 cast if fewer than two levels remain, if any arm has no participants in the
 table, or if the current participant's level is not in the table. Otherwise the
@@ -524,15 +527,17 @@ furthest behind its target, computed from the stored assignment probabilities
 \section{Encrypted datasets}
 \label{sec:encrypt}
 
-\subsection{Why}
+\subsection{Motivation}
 
 The allocation sequence of a trial must stay concealed from the people who
 enroll participants, so the files of a live study should be unreadable without a
 password. Stata has no encrypted file format. We decided on a utility that is
 separate from the randomization commands and does not know about them, built on
 Python because Stata can run Python code and Python has a maintained package for
-AES-encrypted zip files, \texttt{pyzipper}. Users install that package
-themselves.
+AES-encrypted zip files, \texttt{pyzipper}. Users must have installed Python
+and that Python package.  They may also need to set the \texttt{python\_exec}
+system variable to ensure that our new commands are able to run Python on 
+the user's machine.
 
 \subsection{encsave and encuse}
 
@@ -554,8 +559,8 @@ install \texttt{pyzipper} and which Python Stata is using.
 The commands read the password from the environment variable
 \texttt{GRACEDR\_PASSPHRASE}. If it is not set, a masked pop-up prompt opens
 through Python and asks for it, and asks twice when it saves a file. There is
-no \texttt{password()} option. Stata echoes command lines into the log and into
-the command history, so a password typed in a command would be written to
+no \texttt{password()} option. Because Stata echoes command lines into the log and into
+the command history, a password typed in a command would be written to
 both. The password is not stored in a file, and it goes to Python in memory, not
 on a command line. We check in the certification scripts that the password does
 not appear in the log, in \texttt{set trace} output, or in a displayed macro. A
