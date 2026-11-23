@@ -38,9 +38,9 @@ arms with unequal allocation ratios, and a base probability computed from the
 places left before the next forced total. The package stores each study in a
 folder, records every assignment and override in an append-only audit log,
 replays any past assignment, and simulates operating characteristics. Because
-Stata has no built-in encrypted file format, we also describe \texttt{encsave}
+Stata has no built-in encrypted file format, we describe \texttt{encsave}
 and \texttt{encuse}, which save and load datasets as password-protected
-encrypted zip files through Stata's Python integration, and encrypted studies built on them. We
+encrypted zip files through Stata's Python integration. We
 simulated 1,000 trials in each of four settings (200 or 500 participants, with
 and without drift in the enrolled population) and compared the procedure with
 simple randomization, permuted blocks, minimization, and unmodified minimal
@@ -60,8 +60,8 @@ randomness, encryption}
 
 \section{Introduction}
 
-In many clinical trials participants become eligible one at a time and must be
-assigned to treatment immediately. The randomization procedure must then
+In many clinical trials participants become eligible one at a time and each one must be
+assigned to a treatment group immediately. The randomization procedure must then
 balance two goals that pull against each other. Treatment assignments should be
 unpredictable, so that investigators cannot steer participants toward an arm,
 and the arms should be comparable in size and in prognostically important
@@ -82,16 +82,16 @@ the statistical properties, bias, and power of MSB
 \citep{lauzon2020msb,lauzon2022msb} and proposed a common-scale variant
 \citep{johns2022csmsb}.
 
-MSB as published, however, does not guarantee the prescribed group sizes. Most
+MSB as published, however, does not guarantee prescribed group sizes. However, most
 protocols prescribe the number of participants in each arm, and the charters of
-data and safety monitoring boards may expect the arms to be close to their
+data and safety monitoring boards may dictate that treatment arms are close to their
 prescribed sizes at each review. The simplest remedy, capping each arm at its
 prescribed size, creates the problem MSB was designed to avoid: once one arm
 fills, every remaining participant is forced into the other arm, and those
 forced assignments are perfectly predictable. When the enrolled population
-changes over time, the forced tail also turns that time trend into covariate
+changes over time, the forced enrollment tail results in covariate
 imbalance. \citet{zhao2015msb} noted that a balanced allocation could be
-enforced for an initial portion of the trial with the random allocation rule,
+enforced for an initial portion of the trial with a random allocation rule,
 but they did not formalize the idea.
 
 This article describes the \gracedr\ package for Stata 19, which implements a
@@ -105,13 +105,14 @@ the next forced total. A group-size vote and a big stick bound
 keeps the study in a folder with an append-only audit log, replays any past
 assignment, and simulates operating characteristics against four comparators.
 
-Live randomization needs a record that the investigators cannot change
+In many cases, live (dynamic) randomization needs a record that the investigators cannot change
 unnoticed and that unauthorized people cannot read, because the allocation
-sequence must stay concealed. Stata has no encrypted file format. We therefore
-also built \texttt{encsave} and \texttt{encuse}, two commands that are
-independent of the randomization commands, and an option that stores a whole
-study as encrypted files. Section~\ref{sec:encrypt} describes their
-development.
+sequence must stay concealed. Stata has no native encrypted file format. We therefore
+built \texttt{encsave} and \texttt{encuse}, two commands that are
+independent of the randomization commands, and an option for the randomization
+commands that stores a whole
+study as encrypted files. Section~\ref{sec:encrypt} describes the
+development of these commands.
 
 Section~\ref{sec:algorithm} states the algorithm, section~\ref{sec:commands}
 describes the commands with a worked example, section~\ref{sec:encrypt}
@@ -155,13 +156,14 @@ no vote for that variable.
 \emph{Categorical variables.} Let $T$ be the table of previously randomized participants by
 level and arm. Levels with no previous participants are dropped. No vote is
 cast if fewer than two levels remain, if any arm has no participants in the
-table, or if the current participant's level is not in the table. Otherwise the
-Pearson statistic $\chi^2 = \sum_{j,a} (T_{ja} - E_{ja})^2 / E_{ja}$, with
+table, or if the current participant's level is not in the table. 
+Otherwise the Pearson statistic $\chi^2 = \sum_{j,a} (T_{ja} - E_{ja})^2 / E_{ja}$, with
 $E_{ja}$ the product of the row and column totals divided by the table total,
 is compared with a $\chi^2$ distribution on $(L - 1)(k - 1)$ degrees of
 freedom, where $L$ is the number of levels in the table. If the $p$-value is
 below $p^\ast$, the vote goes to the arm with the lowest share
-$T_{ja} / \sum_j T_{ja}$ in the current participant's level $j$. A tie for the
+$T_{ja} / \sum_j T_{ja}$ in the 
+current participant's level $j$. A tie for the
 lowest share gives no vote.
 
 \emph{Continuous variables.} No vote is cast unless every arm has at least two
@@ -363,9 +365,15 @@ forced \\
 
 A list of treatment codes is kept in a file with one row per code and the two
 columns \texttt{code} and \texttt{arm}. A participant's treatment code and id are
-what the user copies into the trial database. The package ships an example list
+what the user copies into the trial database. To highlight usage, the package ships an example list
 of 200 codes. \texttt{gracedr codes} checks that every arm is valid and that the
 codes are unique.
+
+To give context, one of the authors is currently participating in a clinical trial
+which applies en electrical impulse through a medical device.  The amperage
+of that impulse is dictated by the treatment code that is typed in by the
+medical personnel.  Thus, they are blinded by the treatment level.  These
+treatment codes were pre-loaded into each device by the medical device manufacturer. 
 
 A study folder holds five datasets: the design, the participants, the codes, the
 audit log, and the random number state. A write goes first to a file with the
@@ -532,11 +540,11 @@ furthest behind its target, computed from the stored assignment probabilities
 The allocation sequence of a trial must stay concealed from the people who
 enroll participants, so the files of a live study should be unreadable without a
 password. Stata has no encrypted file format. We decided on a utility that is
-separate from the randomization commands and does not know about them, built on
-Python because Stata can run Python code and Python has a maintained package for
-AES-encrypted zip files, \texttt{pyzipper}. Users must have installed Python
-and that Python package.  They may also need to set the \texttt{python\_exec}
-system variable to ensure that our new commands are able to run Python on 
+separate from the randomization commands, built on
+Python because Stata can run Python code (on all platforms) and Python has a dedicated package for
+AES-encrypted zip files, \texttt{pyzipper}. Thus, users must have installed Python
+and the \texttt{pyzipper} Python package.  Users may also need to set the \texttt{python\_exec}
+system variable to ensure that our new commands are able to successfully invoke Python on 
 the user's machine.
 
 \subsection{encsave and encuse}
@@ -592,7 +600,8 @@ In the worked example of section~\ref{sec:commands}, creating the same study
 with the option \texttt{encrypt} and randomizing the same 40 participants gives
 a folder with the files \texttt{audit.zip}, \texttt{codes.zip},
 \texttt{design.zip}, \texttt{participants.zip}, and \texttt{state.zip}, plus a
-\texttt{.bak.zip} copy of each file that was rewritten. With the same seed, the
+\texttt{.bak.zip} copy of each file 
+that was rewritten. With the same seed, the
 same participants, and the same override, its participant table equals that of
 the plain study in every variable except the time stamp.
 
@@ -603,7 +612,8 @@ who holds the password, so the password should be shared only with those who are
 meant to be unblinded. Stata itself makes temporary copies of the dataset in its
 temporary folder while a command runs, and these copies are plain. Stata erases
 them when the command ends, but after a crash one can remain. Users who need to
-keep the allocation sequence from the machine's other users should set Stata's
+keep the allocation sequence from the machine's other 
+users should set Stata's
 temporary folder to a protected location. The commands that write the results of
 a simulation or a table to a file named by the user write plain datasets,
 because the user chooses those files.
@@ -616,11 +626,13 @@ because the user chooses those files.
 Each simulated trial enrolls $N \in \{200, 500\}$ participants into two arms in a
 1:1 ratio. The balance variables are sex, race (three levels), and age, with
 equal weights. The default run-in has 20 participants when $N = 200$ and 50 when
-$N = 500$. Two enrollment streams are used. In the \emph{iid} stream every
+$N = 500$. 
+Two enrollment streams are used. In the \emph{iid} stream every
 participant is drawn from the same population: the probability of male sex is
 0.48, race is white, black, or other with probabilities 0.62, 0.23, and 0.15,
 and age is normal with mean 60 and standard deviation 10. In the \emph{drift}
-stream the population changes steadily over enrollment: the probability of male
+stream the population changes steadily 
+over enrollment: the probability of male
 sex rises from 0.20 to 0.80, the probability of black race rises from 0.08 to
 0.48 with the share of other race fixed at 0.15, and mean age rises from 48 to 72
 years with standard deviation 8. Drift is a stress test, because any rule that
@@ -630,7 +642,8 @@ imbalance.
 Five methods allocate the same participants, with the defaults of the package.
 The modified procedure and unmodified MSB use $p^\ast = 0.30$ and $\xi = 0.65$,
 and the modified procedure also uses $B = 3$ and the default run-in. Permuted
-blocks use blocks of size four. Minimization is the Pocock and Simon rule
+blocks use blocks of size four. 
+Minimization is the Pocock and Simon rule
 \citep{pocock1975}: for each candidate arm it adds the participant to that arm,
 takes the range of the arm counts divided by the target proportions within the
 participant's level of each variable, and sums these ranges over the variables
@@ -641,11 +654,13 @@ remaining probability in proportion to their target proportions.
 
 The measures fall into three groups. \emph{Balance} is the largest absolute standardized
 mean difference (SMD) \citep{austin2009} over the three balance variables at the
-end of enrollment and at the end of the run-in. For a categorical variable the
+end of enrollment and at the end of the 
+run-in. For a categorical variable the
 SMD is the largest over its levels, with each level treated as a 0/1 indicator.
 \emph{Group size} is the absolute difference between the final count of the
 first arm and its target, and the percentage of trials in which the counts are
-exact at the end of the run-in and at the end of enrollment.
+exact at the end of the 
+run-in and at the end of enrollment.
 \emph{Predictability} is measured by the percentage of assignments that are
 forced, meaning that some arm has probability one; by the longest run of
 consecutive forced assignments to the same arm; and by the expected probability
@@ -711,7 +726,8 @@ Table~\ref{tab:sizes} shows group sizes. The modified procedure met the group
 sizes at the end of the run-in and at the end of enrollment in every trial in all
 four settings. Permuted blocks of size four met the final sizes in every trial
 but the run-in sizes in only 68\% of trials when $N = 500$, because the run-in
-of 50 is not a multiple of the block size. Unmodified MSB missed the final sizes
+of 50 is not a multiple of the block size. 
+Unmodified MSB missed the final sizes
 by a mean of 5.75, 6.14, 9.23, and 10.22 participants, with a maximum of 44, and
 it was exact at the end in 2.4\% to 5.3\% of trials. Minimization missed the
 final sizes by a mean of 0.62 to 0.66 participants and was exact in 43.7\% to
@@ -889,7 +905,7 @@ minimization performed best on balance in these simulations.
 Several limitations restrict how far the results extend.
 \begin{itemize}
 \item The simulations use one design: two arms in a 1:1 ratio and three balance
-variables with equal weights. The software handles more arms, unequal ratios,
+variables with equal weights. The new commands handle more arms, unequal ratios,
 unequal weights, and forced totals before the end of enrollment, but none of
 these were simulated here.
 \item Only two enrollment streams were used, and the drift was a steady change
